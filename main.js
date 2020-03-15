@@ -244,7 +244,7 @@ client.on('message', message => {
                         } else if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
                             let warning = message.content.split(instruction[1]);
                             //Let's just send them a message first, just in case something goes wrong with inserting into db. They don't need to know we have db problems :D
-                            sendMessage(message.mentions.members.first(), warnMessage(warning[1]), true);
+                            sendMessage(message.mentions.members.first(), warnMessage(warning[1]).addField("Sent by: ", message.member.displayName), true);
                             connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, warning[1], message.author.id], (err, results, fields) => {
                                 if(err) throw err;
                                 if(results.affectedRows > 0){
@@ -286,6 +286,7 @@ client.on('message', message => {
                                                     message.mentions.members.first().roles.add(specialRoles.get("mute"));
 
                                                     scheduleUnmute(message.mentions.members.first(), until);
+                                                    return;
 
                                                 }
                                             });
@@ -297,6 +298,7 @@ client.on('message', message => {
                                                         sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!"), false);
 
                                                         message.mentions.members.first().roles.add(specialRoles.get("mute"));
+                                                        return;
                                                     }
                                             });
                                         }
@@ -317,8 +319,8 @@ client.on('message', message => {
                                 if(err) throw err;
                                 if(results.affectedRows > 0){
                                     sendMessage(message, successMessage("Successfully unmuted user "+message.mentions.members.first().displayName, false));
-                                    message.mentions.members.first().roles.remove(specialRoles.get("warn"));
-                                    sendMessage(message.mentions.members.first(), successMessage("You've been unmuted from "+member.guild.name+"."), true);
+                                    message.mentions.members.first().roles.remove(specialRoles.get("mute"));
+                                    sendMessage(message.mentions.members.first(), successMessage("You've been unmuted from "+message.guild.name+"."), true);
                                 }
                             });
                         } else sendMessage(message, errorMessage("You need to mention a member in order to mute them!"), false);
@@ -388,6 +390,8 @@ client.on('message', message => {
                     } else sendMessage(message, errorMessage("You need to mention a role in order to add it."), false);
                 }
             }
+        } else if(instruction[0] == "test"){
+            message.reply("🦄");
         }
     }
 
