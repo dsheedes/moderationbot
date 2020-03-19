@@ -3,7 +3,7 @@
 -- http://www.phpmyadmin.net
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 14, 2020 at 10:25 PM
+-- Generation Time: Mar 19, 2020 at 01:29 PM
 -- Server version: 10.1.10-MariaDB
 -- PHP Version: 5.6.15
 
@@ -61,7 +61,8 @@ CREATE TABLE `mutes` (
   `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `duration` datetime NOT NULL,
   `reason` varchar(2048) NOT NULL,
-  `issued_by` varchar(64) NOT NULL
+  `issued_by` varchar(64) NOT NULL,
+  `active` tinyint(1) NOT NULL DEFAULT '1'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
@@ -91,6 +92,21 @@ CREATE TABLE `roles` (
   `rid` varchar(64) NOT NULL,
   `type` varchar(16) NOT NULL,
   `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `sticky`
+--
+
+CREATE TABLE `sticky` (
+  `id` int(11) NOT NULL,
+  `cid` varchar(64) NOT NULL,
+  `mid` varchar(64) NOT NULL,
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `message` varchar(2048) NOT NULL,
+  `created_by` varchar(64) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
@@ -143,6 +159,13 @@ ALTER TABLE `roles`
   ADD UNIQUE KEY `type` (`type`);
 
 --
+-- Indexes for table `sticky`
+--
+ALTER TABLE `sticky`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `cid` (`cid`,`mid`);
+
+--
 -- Indexes for table `warns`
 --
 ALTER TABLE `warns`
@@ -161,27 +184,32 @@ ALTER TABLE `bans`
 -- AUTO_INCREMENT for table `kicks`
 --
 ALTER TABLE `kicks`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 --
 -- AUTO_INCREMENT for table `mutes`
 --
 ALTER TABLE `mutes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 --
 -- AUTO_INCREMENT for table `permissions`
 --
 ALTER TABLE `permissions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 --
 -- AUTO_INCREMENT for table `roles`
 --
 ALTER TABLE `roles`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+--
+-- AUTO_INCREMENT for table `sticky`
+--
+ALTER TABLE `sticky`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 --
 -- AUTO_INCREMENT for table `warns`
 --
 ALTER TABLE `warns`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
