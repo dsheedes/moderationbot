@@ -211,7 +211,7 @@ function scheduleUnban(){
     connection.query("SELECT * FROM bans WHERE duration > NOW() AND active = 1 ORDER BY duration LIMIT 1", [], (err, results, fields) => {
         if(err) console.error("Something went wrong while scheduling unban =>\n"+err);
 
-        if(results.length > 0){
+        if(results != null && results != undefined && results.length > 0){
             let when = new Date(results[0].duration);
             let uid = results[0].uid;
             member = client.guilds.cache.first().members.cache.get(uid);
@@ -400,6 +400,7 @@ client.on('message', message => {
                             } else { //They did not enter a valid value as the warn id
                                 //Display warn data for user
                                 //Let them know to enter the command again.
+                                sendMessage(message, errorMessage("You didn't enter a valid value as the warn ID."), false);
                             }
                         } else if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
                             let warning = message.content.split(instruction[1]);
@@ -411,9 +412,7 @@ client.on('message', message => {
                                     sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**").addField("Reason", warning[1], false), false);
                                 }
                             });
-
                         } else sendMessage(message, errorMessage("You need to mention a member in order to warn them!"), false);
-
                     } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"warn`"), false);
             }).catch(() => { sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"warn`"), false)});
         } else if(instruction[0] == "mute"){
@@ -465,7 +464,6 @@ client.on('message', message => {
                         } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);
                 }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);});
             }
-            
         } else if(instruction[0] == "unmute"){
             checkPermissions(message.member).then((value) => {
                 if(value.mute == 1){ //If they have the role, and permissions to mute
@@ -492,6 +490,7 @@ client.on('message', message => {
                                 if(results.affectedRows > 0){
                                     message.mentions.members.first().kick(reason).then((response) => {
                                         //success kick
+                                        sendMessage(message.mentions.members.first(), infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\n**Reason**\n"+reason), true);
                                     }).catch((e) => console.log(e));
                                 } else sendMessage(message, errorMessage("Something went wrong while trying to kick this member."), false);
                             });
@@ -511,13 +510,14 @@ client.on('message', message => {
                             } 
                             let reason = message.content.split(instruction[3])[1].trim();
                             if(message.mentions.members.first().bannable){
-                                connection.query("INSERT INTO bans VALUES (NULL, ?, DEFAULT, ?, ?, ?)", [message.mentions.members.first().id, until, reason, message.author.id], (err, results, fields) => {
+                                connection.query("INSERT INTO bans VALUES (NULL, ?, DEFAULT, ?, ?, ?, DEFAULT)", [message.mentions.members.first().id, until, reason, message.author.id], (err, results, fields) => {
                                     if(err) throw err;
                                     if(results.affectedRows > 0){
                                         message.mentions.members.first().ban({"reason":reason}).then((response) => {
                                             if(until != null){
                                                 scheduleUnban();
-                                            }
+                                                sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\nBanned until:\n*Forever*\n**Reason**\n"+reason), true);
+                                            } else sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\nBanned until:\n"+until+"**Reason**\n"+reason), true);
                                         }).catch((e) => console.log(e));
                                     } else sendMessage(message, errorMessage("Something went wrong while trying to ban this member."), false);
                                 });
@@ -532,7 +532,6 @@ client.on('message', message => {
                     if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
                         connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [message.mentions.members.first().id], (err, results, fields) => {
                             if(err) console.error("Error while unbanning =>\n"+err);
-
                             if(results.affectedRows > 0){   
                                 sendMessage(message, successMessage("User successfully unbanned."), false);
                                 member.guild.channels.cache.first().createInvite({"maxUses":1, "reason":"Re-invite due to unban by "+message.member.displayName}).then((invite) => {
