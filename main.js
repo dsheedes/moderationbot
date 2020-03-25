@@ -1,6 +1,10 @@
 const Discord = require('discord.js');
 let schedule = require('node-schedule');
 
+// const deepai = require("deepai");
+
+// deepai.setApiKey('0cc8c20f-e2ef-462c-a0f0-54cff2568a38');
+
 let env = require('./env.json');
 
 const client = new Discord.Client();
@@ -17,6 +21,117 @@ let roles = new Map(); // Roles will be sorted by role ID
 let specialRoles = new Map();
 let sticky = new Map();
 
+// async function checkMedia(url){
+//     var resp = await deepai.callStandardApi("nsfw-detector", {
+//         image: url,
+//     });
+
+//     return resp;
+// }
+function findMember(guild, name){
+    let promise = new Promise((resolve, reject) => {
+        name = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); //Escaping bad characters, just in case
+        let members = []; //A new array for our matches
+        let id = 1;
+        guild.members.cache.tap((member) => {
+            if(member.name.user.username.match(/${name}/gi) != null){
+                members.push('[${id}] ${member.user.tag} ;');
+                id++;
+            } else if(member.nickname.match(/${name}/gi) != null){
+                members.push('[${id}] ${member.user.tag} ;');
+                id++
+            }
+        });
+    })
+}
+function mute(message, until, reason){
+    if(until == null)
+        until = new Date(0);
+
+    connection.query("INSERT INTO mutes VALUES (NULL, ?, DEFAULT, ?, ?, ?, 1)", [message.mentions.members.first().id, until, message.content.split(reason)[1].trim(), message.member.id], (err, results, fields) => {
+        if(err) throw err;
+        if(results.affectedRows > 0){
+            //Successfully muted user, notify user, notify admin/mod, create schedule to remove mute
+            sendMessage(message.mentions.members.first(), infoMessage("You've been muted on "+message.guild.name+".").addField("Duration: ", until).addField("Reason: ", message.content.split(reason)[1].trim()), true);
+            sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!"), false);
+
+            message.mentions.members.first().roles.add(specialRoles.get("mute"));
+
+            scheduleUnmute();
+
+        }
+    });
+}
+function unmute(message){
+    connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [message.mentions.members.first().id], (err, results, fields) => {
+        if(err) throw err;
+        if(results.affectedRows > 0){
+            sendMessage(message, successMessage("Successfully unmuted user "+message.mentions.members.first().displayName, false));
+            message.mentions.members.first().roles.remove(specialRoles.get("mute"));
+            sendMessage(message.mentions.members.first(), successMessage("You've been unmuted from "+message.guild.name+"."), true);
+        }
+    });
+}
+function warn(message, warning){
+    sendMessage(message.mentions.members.first(), warnMessage(warning[1]).addField("Sent by: ", message.member.displayName), true);
+    connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, warning[1], message.author.id], (err, results, fields) => {
+        if(err) throw err;
+        if(results.affectedRows > 0){
+            sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**").addField("Reason", warning[1], false), false);
+        }
+    });
+}
+function removeWarning(message, id){
+    connection.query("DELETE FROM warns WHERE id = ?", [id], (err, results, fields) => {
+        if(err) throw err;
+        if(results.affectedRows > 0){
+            sendMessage(message, successMessage("Successfully removed warning #"+id), false);
+        } else sendMessage(message, errorMessage("Could not find warning ID #"+instruction), false);
+    });
+}
+function kick(message, reason){
+    connection.query("INSERT INTO kicks VALUES (NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, reason, message.author.id], (err, results, fields) => {
+        if(err) throw err;
+        if(results.affectedRows > 0){
+            message.mentions.members.first().kick(reason).then((response) => {
+                //success kick
+                sendMessage(message.mentions.members.first(), infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\n**Reason**\n"+reason), true);
+            }).catch((e) => console.log(e));
+        } else sendMessage(message, errorMessage("Something went wrong while trying to kick this member."), false);
+    });
+}
+function ban(message, until, reason){
+    connection.query("INSERT INTO bans VALUES (NULL, ?, DEFAULT, ?, ?, ?, 1)", [message.mentions.members.first().id, until, reason, message.author.id], (err, results, fields) => {
+        if(err) throw err;
+        if(results.affectedRows > 0){
+            message.channel.createInvite({maxAge:0, maxUses:1, unique:true, reason:"Unban invite."}).then((invite) => {
+                sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+". You can use the invite link once/if your ban expires.\n**Duration:**\n"+until+"\n**Banned by:**\n"+message.member.displayName+"\n**Reason:**\n"+reason), true);
+                sendMessage(message.mentions.members.first(), invite.url, true);
+                sendMessage(message, successMessage("Successfully banned user "+message.mentions.members.first().displayName), false);
+                
+                message.mentions.members.first().ban({"reason":reason}).catch((e) => {console.error("Something happened while banning user =>\n"+e); sendMessage(message, errorMessage("Error while banning user."), false)})
+                
+                scheduleUnban();
+            }).catch((e) => {console.error("Error while creating invite =>\n"+e)});
+        } else sendMessage(message, errorMessage("Something went wrong while trying to ban this member."), false);
+    });
+}
+function unban(message, auto){
+    let member = null;
+    if(auto != null && auto != undefined){
+        member = message;
+    } else {member = message.mentions.members.first(); auto = false};
+    connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [member.id], (err, results, fields) => {
+        if(err) console.error("Error while unbanning =>\n"+err);
+        if(results.affectedRows > 0){   
+            if(auto)
+            message.guild.members.unban(member).then(() => {
+                if(!auto)
+                    sendMessage(message, successMessage("User successfully unbanned."), false);
+            }).catch(() => {sendMessage(message, errorMessage("User is not banned."), false);})
+        } else sendMessage(message, errorMessage("User is not banned."), false);
+    });
+}
 function removeSticky(cid){
     connection.query("DELETE FROM sticky WHERE cid = ?", [cid], (err, results, fields) => {
         if(err) console.error("Something went wrong while removing a sticky message =>\n"+err);
@@ -85,7 +200,7 @@ function checkPermissions(member){
             }
         });
 
-        reject(null);
+        resolve(null);
     });
     return promise;
 }
@@ -216,23 +331,36 @@ function scheduleUnban(){
             let uid = results[0].uid;
             member = client.guilds.cache.first().members.cache.get(uid);
 
-            let unban = schedule.scheduleJob(when, () => {
-                connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [member.id], (err, results, fields) => {
-                    if(err) throw err;
-                    if(results.affectedRows > 0){
-                        member.guild.unban(member.id, "Ban time expired.").then((r) => {
-                            member.guild.channels.cache.first().createInvite({"maxUses":1, "reason":"Re-invite due to ban expiring."}).then((invite) => {
-                                sendMessage(member, successMessage("You've been unbanned from "+client.guilds.cache.first().name+". Feel free to join again:\n"+invite.url), true);
-                                scheduleUnban();
-                                unban.cancel();
-                            }).catch((e) => {console.log(e)}); 
-                        }).catch((e) => {console.log(e)});
-        
-                    } //Else it does not exist, maybe previously deleted.
+            let u = schedule.scheduleJob(when, () => {
+                    unban(member, true);
                 });
-            });
         }
     });
+}
+function checkMissed(){
+    // In case a bot crashes when it was supposed to unmute/unban it will miss it's cycle. Therefore we need some way of dealing with these cases.
+connection.query("SELECT * FROM mutes WHERE active = 1 AND duration != ?", [new Date(0)], (err, results, fields) => {
+    if(err) console.error("Error while checking missed unmutes.=>\n"+err);
+
+    for(let i = 0; i < results.length; i++){
+        if(results[i].duration < new Date()){
+            connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [results[i].uid], (err, results, fields) => {
+                if(err) console.error("Error while unmuting uid ${results[i].uid} =>\n"+err);
+            });
+        }
+    }
+});
+connection.query("SELECT * FROM bans WHERE active = 1 AND duration != ?", [new Date(0)], (err, results, fields) => {
+    if(err) console.error("Error while checking missed unbans.=>\n"+err);
+
+    for(let i = 0; i < results.length; i++){
+        if(results[i].duration < new Date()){
+            connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [results[i].uid], (err, results, fields) => {
+                if(err) console.error("Error while unmuting uid ${results[i].uid} =>\n"+err);
+            });
+        }
+    }
+});
 }
 function loadSticky(){
     sticky.clear();
@@ -287,9 +415,8 @@ client.on('ready', () => {
   
   scheduleUnban();
   scheduleUnmute();
-  //When our bot is ready, we can begin our regular checks to see if some of our timers have expired
-    //In case any of the timers expired we can send an invite link to the user that was punished, or clear any restrictions on user
 
+  checkMissed();
 
 });
 // Create an event listener for messages
@@ -309,6 +436,21 @@ client.on('message', message => {
             }
         }
     }
+
+    // if(message.attachments != null && message.attachments != undefined && message.attachments.size > 0){
+    //     message.attachments.tap((attachment) => {
+
+    //         let url = attachment.first().url;
+
+    //         if(url.includes(".jpeg") || url.includes(".jpg") || url.includes(".png") || url.includes(".gif")){
+    //             checkMedia(attachment.first().url).then((response) => {
+    //                 if(response.output.detections != null && response.output.detections != undefined && response.output.detections.length > 0){
+    //                     sendMessage(message, infoMessage("Detected:\n"+response.output.detections[0].name+"\nNSFW SCORE: "+response.output.nsfw_score), false);
+    //                 } else sendMessage(message, infoMessage("\nNSFW SCORE: "+response.output.nsfw_score), false);
+    //             });
+    //         }
+    //     });
+    // }
     
     if(message.content[0] == env.prefix){ //If our message starts with a prefix
         let instruction = message.content.substr(1); //Then let's remove the prefix and store it in instruction variable
@@ -321,7 +463,7 @@ client.on('message', message => {
 
         if(instruction[0] == "add"){ //Only owner can issue this command
             checkPermissions(message.member).then((value) => {
-                if(value.admin == 1 || message.author.id == message.guild.ownerID){
+                if((value != null && value.admin == 1) || message.author.id == message.guild.ownerID){
                     if(instruction[1][0] == "-"){
                         let kick = 0, ban = 0, warn = 0, mute = 0, sticky = 0, admin = 0;
         
@@ -363,10 +505,10 @@ client.on('message', message => {
         } else if(instruction[0] == "remove"){
             if(instruction[1] == "sticky"){
                 checkPermissions(message.member).then((value) => {
-                    if(value.sticky == 1){
+                    if(value != null && value.sticky == 1){
                         removeSticky(message.channel.id);
                     } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"remove sticky`"), false);
-                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"remove sticky`"), false)})
+                }).catch(() => {})
             } else 
             if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){ // If there are roles mentioned
                 message.mentions.roles.each((role) => {
@@ -386,17 +528,12 @@ client.on('message', message => {
         } else if(instruction[0] == "warn"){
             //warn @user reason
             checkPermissions(message.member).then((value) => {
-                if(value.warn == 1){
+                if(value != null && value.warn == 1){
                         //They have permissions.
                         //Now we can check if they composed the message properly
                         if(instruction [1] == "remove" || instruction[1] == "r" || instruction[1] == "rm"){
                             if(instruction[2] != undefined && instruction[2] != null && !isNaN(instruction[2])){ //If they inserted the warn id and if it is a number
-                                connection.query("DELETE FROM warns WHERE id = ?", [instruction[2]], (err, results, fields) => {
-                                    if(err) throw err;
-                                    if(results.affectedRows > 0){
-                                        sendMessage(message, successMessage("Successfully removed warning #"+instruction[2]), false);
-                                    } else sendMessage(message, errorMessage("Could not find warning ID #"+instruction[2]), false);
-                                });
+                                removeWarning(message, instruction[2]);
                             } else { //They did not enter a valid value as the warn id
                                 //Display warn data for user
                                 //Let them know to enter the command again.
@@ -407,22 +544,16 @@ client.on('message', message => {
 
                             if(warning != null && warning != undefined && warning.length > 0){
                                 //Let's just send them a message first, just in case something goes wrong with inserting into db. They don't need to know we have db problems :D
-                                sendMessage(message.mentions.members.first(), warnMessage(warning[1]).addField("Sent by: ", message.member.displayName), true);
-                                connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, warning[1], message.author.id], (err, results, fields) => {
-                                    if(err) throw err;
-                                    if(results.affectedRows > 0){
-                                        sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**").addField("Reason", warning[1], false), false);
-                                    }
-                                });
+                                warn(message, warning);
                             } else sendMessage(message, errorMessage("You need to have a reason to warn this member. Please try again."));
                         } else sendMessage(message, errorMessage("You need to mention a member in order to warn them!"), false);
                     } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"warn`"), false);
-            }).catch(() => { sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"warn`"), false)});
+            }).catch(() => {});
         } else if(instruction[0] == "mute"){
             //mute @user -time reason
             if(specialRoles.has("mute")){
                 checkPermissions(message.member).then((value) => {
-                    if(value.mute == 1){
+                    if(value != null && value.mute == 1){
                             //They have permissions.
                             //Now we can check if they composed the message properly
                             if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
@@ -434,130 +565,80 @@ client.on('message', message => {
                                     } else {
                                         if(instruction[2] != undefined && instruction[2] != undefined && instruction[2][0] == "-"){
                                             let string = instruction[2].split("-");
-                                            let until = stringToDateTime(string);
+                                            let until = stringToDateTime(string[1]);
 
                                             if(string[1] != null && string[1] != undefined && string[1].length > 0){
-                                                connection.query("INSERT INTO mutes VALUES (NULL, ?, DEFAULT, ?, ?, ?, DEFAULT)", [message.mentions.members.first().id, until, message.content.split(instruction[2])[1].trim(), message.member.id], (err, results, fields) => {
-                                                    if(err) throw err;
-                                                    if(results.affectedRows > 0){
-                                                        //Successfully muted user, notify user, notify admin/mod, create schedule to remove mute
-                                                        sendMessage(message.mentions.members.first(), infoMessage("You've been muted on "+message.guild.name+".").addField("Duration: ", until).addField("Reason: ", message.content.split(instruction[2])[1].trim()), true);
-                                                        sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!"), false);
-
-                                                        message.mentions.members.first().roles.add(specialRoles.get("mute"));
-
-                                                        scheduleUnmute();
-                                                        return;
-
-                                                    }
-                                                });
+                                                mute(message, until, string[1]);
                                             } else sendMessage(message, errorMessage("You need to have a reason to mute this member. Please try again."), false);
                                             
                                         } else {
-                                            if(instruction[3] != null && instruction[3] != undefined && instruction[3].length > 0){
-                                                connection.query("INSERT INTO mutes VALUES (NULL, ?, DEFAULT, ?, ?, ?", [message.mentions.members.first().id, new Date(), message.content.split(instruction[2])[1].trim(), message.member.id], (err, results, fields) => {
-                                                        if(err) throw err;
-                                                        if(results.affectedRows > 0){
-                                                            sendMessage(message.mentions.members.first(), infoMessage("You've been muted on "+message.guild.name+".").addField("Duration: ", "Until unmuted.").addField("Reason: ", message.content.split(instruction[2])[1].trim()), true);
-                                                            sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!"), false);
-
-                                                            message.mentions.members.first().roles.add(specialRoles.get("mute"));
-                                                            return;
-                                                        }
-                                                });
+                                            if(instruction[2] != null && instruction[2] != undefined && instruction[2].length > 0){
+                                                mute(message, null, instruction[1]);
                                             } else sendMessage(message, errorMessage("You need to have a reason to mute this member. Please try again."), false);
                                         }
                                     }
                                 });
                             } else sendMessage(message, errorMessage("You need to mention a member in order to mute them!"), false);
                         } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);
-                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);});
-            }
+                }).catch(() => {});
+            } else sendMessage(message, errorMessage("The bot isn't properly configured. You need to add a mute role first!"), false);
         } else if(instruction[0] == "unmute"){
             checkPermissions(message.member).then((value) => {
-                if(value.mute == 1){ //If they have the role, and permissions to mute
-                    if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
-                        connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [message.mentions.members.first().id], (err, results, fields) => {
-                            if(err) throw err;
-                            if(results.affectedRows > 0){
-                                sendMessage(message, successMessage("Successfully unmuted user "+message.mentions.members.first().displayName, false));
-                                message.mentions.members.first().roles.remove(specialRoles.get("mute"));
-                                sendMessage(message.mentions.members.first(), successMessage("You've been unmuted from "+message.guild.name+"."), true);
-                            }
-                        });
+                if(value != null && value.mute == 1){ //If they have the role, and permissions to mute
+                    if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
+                        unmute(message);
                     } else sendMessage(message, errorMessage("You need to mention a member in order to mute them!"), false);
                 } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);
-            }).catch(()=>{sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);});
+            }).catch(()=>{});
         } else if(instruction[0] == "kick" || instruction[0] == "k"){
             checkPermissions(message.member).then((value) => {
-                if(value.kick == 1){ //If they have the role, and permissions to mute
-                    if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
+                if(value != null && value.kick == 1){ //If they have the role, and permissions to mute
+                    if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
                         if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
                             let reason = message.content.split(instruction[1])[1];
 
                             if(reason != null && reason != undefined && reason.length > 0){
                                 reason = reason.trim();
-                                connection.query("INSERT INTO kicks VALUES (NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, reason, message.author.id], (err, results, fields) => {
-                                    if(err) throw err;
-                                    if(results.affectedRows > 0){
-                                        message.mentions.members.first().kick(reason).then((response) => {
-                                            //success kick
-                                            sendMessage(message.mentions.members.first(), infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\n**Reason**\n"+reason), true);
-                                        }).catch((e) => console.log(e));
-                                    } else sendMessage(message, errorMessage("Something went wrong while trying to kick this member."), false);
-                                });
+                                kick(message, reason);
                             } else sendMessage(message, errorMessage("You cannot kick a member without stating a reason. Please try again."), false);
                         } else sendMessage(message, errorMessage("Cannot kick. This member has higher priviledges than you."), false);
                     } else sendMessage(message, errorMessage("You need to mention a member you want to kick first!"), false)
                 } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"kick`"), false);
-            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"kick`"), false);});
+            }).catch(() => {});
         } else if(instruction[0] == "ban" || instruction[0] == "b"){
             checkPermissions(message.member).then((value) => {
-                if(value.ban == 1){ //If they have the role, and permissions to mute
-                    if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
+                if(value != null && value.ban == 1){ //If they have the role, and permissions to mute
+                    if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
                         if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
                             let until = null;
+                            let reason = null;
                             if(instruction[2][0] == "-"){
-                                let string = instruction[2].split("-")[1];
+                                string = instruction[2].split("-")[1];
+                                reason = message.content.split(instruction[2])[1];
                                 until = stringToDateTime(string);
-                            } 
-                            let reason = message.content.split(instruction[3])[1];
+                            } else {
+                                reason = message.content.split(instruction[1])[1];
+                                until = new Date(0);
+                            }
+                            
 
                             if(reason != null && reason != undefined && reason.length > 0){
                                 reason = reason.trim();
                                 if(message.mentions.members.first().bannable){
-                                    connection.query("INSERT INTO bans VALUES (NULL, ?, DEFAULT, ?, ?, ?, DEFAULT)", [message.mentions.members.first().id, until, reason, message.author.id], (err, results, fields) => {
-                                        if(err) throw err;
-                                        if(results.affectedRows > 0){
-                                            message.mentions.members.first().ban({"reason":reason}).then((response) => {
-                                                if(until != null){
-                                                    scheduleUnban();
-                                                    sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\nBanned until:\n*Forever*\n**Reason**\n"+reason), true);
-                                                } else sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\nBanned until:\n"+until+"**Reason**\n"+reason), true);
-                                            }).catch((e) => console.log(e));
-                                        } else sendMessage(message, errorMessage("Something went wrong while trying to ban this member."), false);
-                                    });
+                                    ban(message, until, reason);
                                 } else sendMessage(message, errorMessage("This member is not bannable."), false);
                             } else sendMessage(message, errorMessage("You cannot ban a member without stating a reason. Please try again."), false);
                         } else sendMessage(message, errorMessage("Cannot ban. You need more priviledges to ban this user."), false);
                     } else sendMessage(message, errorMessage("You need to mention a member you want to ban first!"), false)
                 } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false);
-            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false)});
+            }).catch(() => {});
         } else if(instruction[0] == "unban"){
             checkPermissions(message.member).then((value) => {
-                if(value.ban == 1){
-                    if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
-                        connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [message.mentions.members.first().id], (err, results, fields) => {
-                            if(err) console.error("Error while unbanning =>\n"+err);
-                            if(results.affectedRows > 0){   
-                                sendMessage(message, successMessage("User successfully unbanned."), false);
-                                member.guild.channels.cache.first().createInvite({"maxUses":1, "reason":"Re-invite due to unban by "+message.member.displayName}).then((invite) => {
-                                    sendMessage(member, successMessage("You've been unbanned from "+client.guilds.cache.first().name+". Feel free to join again:\n"+invite.url), true);
-                                }).catch((e) => {console.log(e)}); 
-                            } else sendMessage(message, errorMessage("User is not banned."), false);
-                        });
+                if(value != null && value.ban == 1){
+                    if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
+                        unban(message);
                     } else sendMessage(message, errorMessage("You need to mention a member you want to unban first!"), false);
-                }
+                } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"unban`"), false)
             }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"unban`"), false)});
         } else if(instruction[0] == "role" && message.guild.ownerID == message.member.id){
             if(instruction[1] == "add"){
@@ -578,37 +659,39 @@ client.on('message', message => {
         } else if(instruction[0] == "info"){
             if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
                 checkPermissions(message.member).then((value) => {
-                    displayInfo(message.mentions.members.first(), "warn").then((response) => {
-                        if(response != null){
-                            sendMessage(message.author, response.setTitle("Warnings: "), true);
-                        } else sendMessage(message.author, infoMessage("This user has no items on their warn record."), true);
-                    }).catch((e) => {console.error("Error while trying to display info =>\n"+e)});
-                    displayInfo(message.mentions.members.first(), "mute").then((response) => {
-                        if(response != null){
-                            sendMessage(message.author, response.setTitle("Mutes: "), true);
-                        } else sendMessage(message.author, infoMessage("This user has no items on their mute record."), true);
-                    }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
-                    displayInfo(message.mentions.members.first(), "kick").then((response) => {
-                        if(response != null){
-                            sendMessage(message.author, response.setTitle("Kicks: "), true);
-                        } else sendMessage(message.author, infoMessage("This user has no items on their kick record."), true);
-                    }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
-                    displayInfo(message.mentions.members.first(), "ban").then((response) => {
-                        if(response != null){
-                            sendMessage(message.author, response.setTitle("Bans: "), true);
-                        } else sendMessage(message.author, infoMessage("This user has no items on their ban record."), true);
-                    }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
-                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"info`"), false)});
+                    if(value != null){
+                        displayInfo(message.mentions.members.first(), "warn").then((response) => {
+                            if(response != null){
+                                sendMessage(message.author, response.setTitle("Warnings: "), true);
+                            } else sendMessage(message.author, infoMessage("This user has no items on their warn record."), true);
+                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)});
+                        displayInfo(message.mentions.members.first(), "mute").then((response) => {
+                            if(response != null){
+                                sendMessage(message.author, response.setTitle("Mutes: "), true);
+                            } else sendMessage(message.author, infoMessage("This user has no items on their mute record."), true);
+                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
+                        displayInfo(message.mentions.members.first(), "kick").then((response) => {
+                            if(response != null){
+                                sendMessage(message.author, response.setTitle("Kicks: "), true);
+                            } else sendMessage(message.author, infoMessage("This user has no items on their kick record."), true);
+                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
+                        displayInfo(message.mentions.members.first(), "ban").then((response) => {
+                            if(response != null){
+                                sendMessage(message.author, response.setTitle("Bans: "), true);
+                            } else sendMessage(message.author, infoMessage("This user has no items on their ban record."), true);
+                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
+                    } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"info`"), false);
+                }).catch(() => {});
             } else sendMessage(message, errorMessage("You need to mention a user to check their info first."), false);
         } else if(instruction[0] == "sticky"){
             if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
                 let content = message.content.split(env.prefix+""+instruction[0])[1];
                 if(content != null && content != undefined && content.length > 0){
                     checkPermissions(message.member).then((value) => {
-                        if(value.sticky == 1){
+                        if(value != null && value.sticky == 1){
                             addSticky(message, content);
                         } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"sticky`"), false);
-                    }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"sticky`"), false)})
+                    }).catch(() => {})
                 } else sendMessage(message, errorMessage("You cannot set an empty sticky message!"),false);
             }
         }
@@ -616,4 +699,10 @@ client.on('message', message => {
 
 });
 
+client.on("guildBanRemove", (guild, user) => {
+    //Someone manually unbanned a user, we still want to log this
+    connection.query("UPDATE bans SET active = 0 WHERE active = 1 AND uid = ?", [user.id], (err, results, fields) => {
+        if (err) console.log("Error while logging manual unbans. =>\n"+err);
+    })
+});
 client.login(env.token);

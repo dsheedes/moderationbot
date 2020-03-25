@@ -1,15 +1,13 @@
 -- phpMyAdmin SQL Dump
--- version 5.0.1
--- https://www.phpmyadmin.net/
+-- version 4.5.1
+-- http://www.phpmyadmin.net
 --
 -- Host: 127.0.0.1
--- Generation Time: Mar 21, 2020 at 07:19 PM
--- Server version: 10.4.11-MariaDB
--- PHP Version: 7.4.2
+-- Generation Time: Mar 25, 2020 at 06:05 PM
+-- Server version: 10.1.10-MariaDB
+-- PHP Version: 5.6.15
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-SET AUTOCOMMIT = 0;
-START TRANSACTION;
 SET time_zone = "+00:00";
 
 
@@ -31,7 +29,7 @@ SET time_zone = "+00:00";
 CREATE TABLE `bans` (
   `id` int(11) NOT NULL,
   `uid` varchar(64) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp(),
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `duration` datetime NOT NULL,
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL,
@@ -47,7 +45,7 @@ CREATE TABLE `bans` (
 CREATE TABLE `kicks` (
   `id` int(11) NOT NULL,
   `uid` varchar(64) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp(),
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `reason` varchar(2048) DEFAULT NULL,
   `issued_by` varchar(64) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -61,11 +59,11 @@ CREATE TABLE `kicks` (
 CREATE TABLE `mutes` (
   `id` int(11) NOT NULL,
   `uid` varchar(64) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp(),
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `duration` datetime NOT NULL,
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL,
-  `active` tinyint(1) NOT NULL DEFAULT 1
+  `active` tinyint(1) NOT NULL DEFAULT '1'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
@@ -77,13 +75,13 @@ CREATE TABLE `mutes` (
 CREATE TABLE `permissions` (
   `id` int(11) NOT NULL,
   `rid` varchar(64) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp(),
-  `mute` tinyint(1) NOT NULL DEFAULT 0,
-  `kick` tinyint(1) NOT NULL DEFAULT 0,
-  `warn` tinyint(1) NOT NULL DEFAULT 0,
-  `ban` tinyint(1) NOT NULL DEFAULT 0,
-  `sticky` tinyint(1) NOT NULL DEFAULT 0,
-  `admin` tinyint(1) NOT NULL DEFAULT 0
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `mute` tinyint(1) NOT NULL DEFAULT '0',
+  `kick` tinyint(1) NOT NULL DEFAULT '0',
+  `warn` tinyint(1) NOT NULL DEFAULT '0',
+  `ban` tinyint(1) NOT NULL DEFAULT '0',
+  `sticky` tinyint(1) NOT NULL DEFAULT '0',
+  `admin` tinyint(1) NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
@@ -96,7 +94,7 @@ CREATE TABLE `roles` (
   `id` int(11) NOT NULL,
   `rid` varchar(64) NOT NULL,
   `type` varchar(16) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp()
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- --------------------------------------------------------
@@ -109,7 +107,7 @@ CREATE TABLE `sticky` (
   `id` int(11) NOT NULL,
   `cid` varchar(64) NOT NULL,
   `mid` varchar(64) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp(),
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `message` varchar(2048) NOT NULL,
   `created_by` varchar(64) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -123,7 +121,7 @@ CREATE TABLE `sticky` (
 CREATE TABLE `warns` (
   `id` int(11) NOT NULL,
   `uid` varchar(64) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp(),
+  `date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -184,45 +182,37 @@ ALTER TABLE `warns`
 -- AUTO_INCREMENT for table `bans`
 --
 ALTER TABLE `bans`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 --
 -- AUTO_INCREMENT for table `kicks`
 --
 ALTER TABLE `kicks`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 --
 -- AUTO_INCREMENT for table `mutes`
 --
 ALTER TABLE `mutes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 --
 -- AUTO_INCREMENT for table `permissions`
 --
 ALTER TABLE `permissions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 --
 -- AUTO_INCREMENT for table `roles`
 --
 ALTER TABLE `roles`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 --
 -- AUTO_INCREMENT for table `sticky`
 --
 ALTER TABLE `sticky`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
 --
 -- AUTO_INCREMENT for table `warns`
 --
 ALTER TABLE `warns`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-COMMIT;
-
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
