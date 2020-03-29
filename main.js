@@ -1,10 +1,6 @@
 const Discord = require('discord.js');
 let schedule = require('node-schedule');
 
-// const deepai = require("deepai");
-
-// deepai.setApiKey('0cc8c20f-e2ef-462c-a0f0-54cff2568a38');
-
 let env = require('./env.json');
 
 const client = new Discord.Client();
@@ -20,14 +16,18 @@ var connection = mysql.createPool({
 let roles = new Map(); // Roles will be sorted by role ID
 let specialRoles = new Map();
 let sticky = new Map();
+let defaultChannel;
 
-// async function checkMedia(url){
-//     var resp = await deepai.callStandardApi("nsfw-detector", {
-//         image: url,
-//     });
 
-//     return resp;
-// }
+function loadDefaultChannel(){
+	connection.query("SELECT rid FROM default_channel LIMIT 1", [], (err, results, fields) => {
+		if(err) console.log("Error while getting default channel:\n"+err);
+
+		if(results != null && results != undefined && results.length > 0){
+			defaultChannel = client.guilds.cache.first().channels.cache.get(results[0].rid);
+		}
+	});
+}
 function findMember(guild, name){
     let promise = new Promise((resolve, reject) => {
         name = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); //Escaping bad characters, just in case
@@ -53,7 +53,7 @@ function mute(message, until, reason){
         if(results.affectedRows > 0){
             //Successfully muted user, notify user, notify admin/mod, create schedule to remove mute
             sendMessage(message.mentions.members.first(), infoMessage("You've been muted on "+message.guild.name+".").addField("Duration: ", until).addField("Reason: ", message.content.split(reason)[1].trim()), true);
-            sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!"), false);
+            sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!"), false, true);
 
             message.mentions.members.first().roles.add(specialRoles.get("mute"));
 
@@ -66,18 +66,22 @@ function unmute(message){
     connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [message.mentions.members.first().id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message, successMessage("Successfully unmuted user "+message.mentions.members.first().displayName, false));
+            sendMessage(message, successMessage("Successfully unmuted user "+message.mentions.members.first().displayName, false), true);
             message.mentions.members.first().roles.remove(specialRoles.get("mute"));
             sendMessage(message.mentions.members.first(), successMessage("You've been unmuted from "+message.guild.name+"."), true);
         }
     });
 }
 function warn(message, warning){
+    if(warning == null || warning == undefined || warning.length == 0){
+	warning[0] = null
+	warning[1] = "none";
+    }
     sendMessage(message.mentions.members.first(), warnMessage(warning[1]).addField("Sent by: ", message.member.displayName), true);
     connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, warning[1], message.author.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**").addField("Reason", warning[1], false), false);
+            sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**").addField("Reason", warning[1], false), false, true);
         }
     });
 }
@@ -85,7 +89,7 @@ function removeWarning(message, id){
     connection.query("DELETE FROM warns WHERE id = ?", [id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message, successMessage("Successfully removed warning #"+id), false);
+            sendMessage(message, successMessage("Successfully removed warning #"+id), false, true);
         } else sendMessage(message, errorMessage("Could not find warning ID #"+instruction), false);
     });
 }
@@ -96,6 +100,7 @@ function kick(message, reason){
             message.mentions.members.first().kick(reason).then((response) => {
                 //success kick
                 sendMessage(message.mentions.members.first(), infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\n**Reason**\n"+reason), true);
+		sendMessage(message, successMessage(`User ${message.mentions.members.first().displayName} successfully kicked!`), false, true); 
             }).catch((e) => console.log(e));
         } else sendMessage(message, errorMessage("Something went wrong while trying to kick this member."), false);
     });
@@ -107,7 +112,7 @@ function ban(message, until, reason){
             message.channel.createInvite({maxAge:0, maxUses:1, unique:true, reason:"Unban invite."}).then((invite) => {
                 sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+". You can use the invite link once/if your ban expires.\n**Duration:**\n"+until+"\n**Banned by:**\n"+message.member.displayName+"\n**Reason:**\n"+reason), true);
                 sendMessage(message.mentions.members.first(), invite.url, true);
-                sendMessage(message, successMessage("Successfully banned user "+message.mentions.members.first().displayName), false);
+                sendMessage(message, successMessage("Successfully banned user "+message.mentions.members.first().displayName), false, true);
                 
                 message.mentions.members.first().ban({"reason":reason}).catch((e) => {console.error("Something happened while banning user =>\n"+e); sendMessage(message, errorMessage("Error while banning user."), false)})
                 
@@ -127,7 +132,7 @@ function unban(message, auto){
             if(auto)
             message.guild.members.unban(member).then(() => {
                 if(!auto)
-                    sendMessage(message, successMessage("User successfully unbanned."), false);
+                    sendMessage(message, successMessage("User successfully unbanned."), false, true);
             }).catch(() => {sendMessage(message, errorMessage("User is not banned."), false);})
         } else sendMessage(message, errorMessage("User is not banned."), false);
     });
@@ -240,12 +245,28 @@ function infoMessage(content){
     
     return embed;
 }
+function logMessage(message, content){
+    const embed = new Discord.MessageEmbed()
+	.setTitle(":clipboard: Log")
+	.setColor(0x007bff)
+	.setDescription(content.description)
+	.setTimestamp(new Date())
+	.addField("Channel:", message.channel.name, true)
+	.addField("By:", message.member.displayName, true)
+	.addField("Member involved: ", "Display name: "+message.mentions.members.first().displayName+"\nID: "+message.mentions.members.first().id, true)
 
-function sendMessage(to, content, private){ //If we want to send a private message, we pass user, otherwise pass message
+	return embed;
+}
+function sendMessage(to, content, private, log){ //If we want to send a private message, we pass user, otherwise pass message
     if(private){
         to.send(content).catch((e) => {console.error("Error while sending private message =>\n"+e)});
     } else {
         to.channel.send(content).catch((e) => {console.error("Error while sending public message =>\n"+e)});;
+    }
+    if(log != null && log != undefined && log == true){
+        if(defaultChannel != null){
+	    defaultChannel.send(logMessage(to, content));
+	} else console.log("No default channel.");
     }
 }
 function stringToDateTime(string){
@@ -412,6 +433,7 @@ client.on('ready', () => {
   loadRoles();
   loadSpecialRoles();
   loadSticky();
+  loadDefaultChannel();
   
   scheduleUnban();
   scheduleUnmute();
@@ -421,7 +443,6 @@ client.on('ready', () => {
 });
 // Create an event listener for messages
 client.on('message', message => {
-
     if(sticky.size > 0){ //If there are sticky messages.
     // We need to check if the message is actually a sticky message sent from the bot, if it is not we proceed
         if(message.content.toLowerCase() != env.prefix+"remove sticky"){
@@ -541,8 +562,7 @@ client.on('message', message => {
                             }
                         } else if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
                             let warning = message.content.split(instruction[1]);
-
-                            if(warning != null && warning != undefined && warning.length > 0){
+                            if(warning != null && warning != undefined && warning.length > 0 && warning[1] != null && warning[1] != undefined && warning[1].length > 0){
                                 //Let's just send them a message first, just in case something goes wrong with inserting into db. They don't need to know we have db problems :D
                                 warn(message, warning);
                             } else sendMessage(message, errorMessage("You need to have a reason to warn this member. Please try again."));
@@ -694,15 +714,27 @@ client.on('message', message => {
                     }).catch(() => {})
                 } else sendMessage(message, errorMessage("You cannot set an empty sticky message!"),false);
             }
-        }
+        } else if(instruction[0] == "set" && instruction[1] == "default" && instruction[2] == "channel"){
+		if(message.mentions != null && message.mentions != undefined && message.mentions.channels != undefined && message.mentions.channels != null){
+			connection.query("INSERT INTO default_channel VALUES(null, ?, default, ?) ON DUPLICATE KEY UPDATE rid = ?", [message.channel.id, message.author.id, message.channel.id], (err, results, fields) => {
+				if(err) console.err("Error while inserting default channel\n"+err)
+
+				if(results.affectedRows > 0){
+					sendMessage(message, successMessage("Successfully added a default channel."), false, true);
+					defaultChannel = message.channel;
+				} else sendMessage(message, errorMessage("Unable to add a default channel."), false);
+			});
+		}
+	}
     }
 
 });
-
 client.on("guildBanRemove", (guild, user) => {
     //Someone manually unbanned a user, we still want to log this
     connection.query("UPDATE bans SET active = 0 WHERE active = 1 AND uid = ?", [user.id], (err, results, fields) => {
         if (err) console.log("Error while logging manual unbans. =>\n"+err);
     })
 });
+
 client.login(env.token);
+
