@@ -1,5 +1,6 @@
 const Discord = require('discord.js');
 let schedule = require('node-schedule');
+const request = require('request');
 
 let env = require('./env.json');
 
@@ -18,6 +19,18 @@ let specialRoles = new Map();
 let sticky = new Map();
 let defaultChannel;
 
+// Server status monitor vars
+var min = null
+var h = null
+var t = null
+var r = null
+
+let oneAM = new Date();
+let sevenAM = new Date();
+let onePM = new Date();
+let sevenPM = new Date();
+
+let nextRestart, lastRestart;
 
 function loadDefaultChannel(){
 	connection.query("SELECT rid FROM default_channel LIMIT 1", [], (err, results, fields) => {
@@ -266,7 +279,7 @@ function sendMessage(to, content, private, log){ //If we want to send a private 
     if(log != null && log != undefined && log == true){
         if(defaultChannel != null){
 	    defaultChannel.send(logMessage(to, content));
-	} else console.log("No default channel.");
+	}
     }
 }
 function stringToDateTime(string){
@@ -715,17 +728,150 @@ client.on('message', message => {
                 } else sendMessage(message, errorMessage("You cannot set an empty sticky message!"),false);
             }
         } else if(instruction[0] == "set" && instruction[1] == "default" && instruction[2] == "channel"){
-		if(message.mentions != null && message.mentions != undefined && message.mentions.channels != undefined && message.mentions.channels != null){
-			connection.query("INSERT INTO default_channel VALUES(null, ?, default, ?) ON DUPLICATE KEY UPDATE rid = ?", [message.channel.id, message.author.id, message.channel.id], (err, results, fields) => {
-				if(err) console.err("Error while inserting default channel\n"+err)
+            checkPermissions(message.member).then((value) => {
+                if((value != null && value.admin == 1) || message.author.id == message.guild.ownerID){
+                    connection.query("INSERT INTO default_channel VALUES(null, ?, default, ?) ON DUPLICATE KEY UPDATE rid = ?", [message.channel.id, message.author.id, message.channel.id], (err, results, fields) => {
+                        if(err) console.err("Error while inserting default channel\n"+err)
+                        if(results.affectedRows > 0){
+                            sendMessage(message, successMessage("Successfully added a default channel."), false, true);
+                            defaultChannel = message.channel;
+                        } else sendMessage(message, errorMessage("Unable to add a default channel."), false);
+                    });
+                } else sendMessage(message, errorMessage("You do not have enough permissions to do this."), false);
+            })
+	    } else if(instruction[0] == "start"){
+            //Code by Traktoorn#5566 with slight modification
 
-				if(results.affectedRows > 0){
-					sendMessage(message, successMessage("Successfully added a default channel."), false, true);
-					defaultChannel = message.channel;
-				} else sendMessage(message, errorMessage("Unable to add a default channel."), false);
-			});
-		}
-	}
+            checkPermissions(message.member).then((value) => {
+                if(value != null && value.admin == 1){
+                    var guild = client.guilds.cache.get("653328277359820834");
+                    let channel4 = guild.channels.cache.get("688519104096632854");
+                    // message.delete();
+                    var Embed = new Discord.MessageEmbed()
+                        .setColor("#ff8c00")
+                        .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
+                        .setDescription("Im booting up! \n Fetching data...")
+                        .setTimestamp("\u200b")
+                        .setFooter('Made by Mr.Traktoorn');
+                    var online = true;
+                    var m = channel4.send(Embed).then((m) => {
+                        setInterval(() => {
+                            //Restart times 
+                            oneAM.setHours(1, 0, 0, 0); //1AM
+                            sevenAM.setHours(7, 0, 0, 0); //7AM
+                            onePM.setHours(13, 0, 0, 0); //1PM
+                            sevenPM.setHours(19, 0, 0, 0); //7PM
+            
+                            //Now we have our restart dates for the current date.
+                            //Let's check where we are in the day right now, and possibly change the dates accordingly.
+                            let rightNow = new Date();
+                            if(rightNow > oneAM){
+                                if(rightNow > sevenAM){
+                                    if(rightNow > onePM){
+                                        if(rightNow > sevenPM){
+                                            //Next restart at 1am, next day
+                                            oneAM.setDate(oneAM.getDate()+1);
+                                            r = "GMT : **1am** | 7am | 1pm | 7pm\n EST : 3am | 9am | 3pm | **9pm**";
+                                            nextRestart = oneAM;
+                                            lastRestart = sevenPM;
+            
+                                            //Since the next restart is tomorrow, we can add a day to all of the times;
+                                            sevenAM.setDate(sevenAM.getDate()+1);
+                                            onePM.setDate(onePM.getDate()+1);
+                                            sevenPM.setDate(sevenPM.getDate()+1);
+                                        } else {
+                                            //Next restart at 7pm
+                                            r = "GMT :  1am | 7am | 1pm | **7pm**\n EST : 3am | 9am | **3pm** | 9pm";
+                                            nextRestart = sevenPM;
+                                            lastRestart = onePM;
+                                        }
+                                    } else {    
+                                        //Next restart at 1pm
+                                        r = "GMT : 1am | 7am |**1pm** | 7pm\n EST : 3am | **9am** | 3pm | 9pm";
+                                        nextRestart = onePM;
+                                        lastRestart = sevenAM;
+                                    }
+                                } else {
+                                    //Next restart at 7am
+                                    r = "GMT :  1am | **7am** | 1pm | 7pm\n EST : **3am** | 9am | 3pm | 9pm";
+                                    nextRestart = sevenAM;
+                                    lastRestart = oneAM;
+                                }
+                            } else {
+                                //Next restart 1am this day
+                                r = "GMT : **1am** | 7am | 1pm | 7pm\n EST : 3am | 9am | 3pm | **9pm**";
+                                nextRestart = oneAM;
+                            }
+                            client.user.setActivity(`PhoenixRP discord has ${client.users.cache.size} members!`);
+                            var ja = request('https://servers-live.fivem.net/api/servers/single/kqevrr', { json: true }, async (err, res, body) => {
+                                if (body != null && body != undefined && body.Data != null && body.Data != undefined) {
+                                    var now = new Date();
+                                    h = now.getHours();
+                                    min = now.getMinutes();
+            
+                                    h = ("0"+h).slice(-2)+"h";
+                                    min = ("0"+min).slice(-2)+"m";
+            
+                                    var hostname = body['Data']['hostname'];
+                                    var players = body["Data"]["clients"];
+                                    var maxp = body["Data"]["sv_maxclients"];
+                                    var uptime;
+            
+                                    if(body['Data']["vars"]['Uptime'] != undefined && body['Data']["vars"]['Uptime'] != null){
+                                        uptime = body['Data']['vars']['Uptime'];
+                                    } else {
+                                        uptime = new Date(Math.abs(rightNow - lastRestart));
+                                        uptime = ("0" + uptime.getHours()).slice(-2)+"h "+("0" + uptime.getMinutes()).slice(-2)+"m";
+                                    }
+            
+            
+                                    t = new Date(Math.abs(nextRestart - rightNow));
+                                    t = ("0"+t.getHours()).slice(-2)+"h "+("0"+t.getMinutes()).slice(-2)+"m";
+            
+                                    if (!online) { online = true; }
+                                    var hasQue = false;
+                                    if (hostname[0] == "[") {
+                                        hasQue = true;
+                                    }
+                                    var que = 0;
+                                    if (hasQue) {
+                                        var regex = /[+-]?\d+(?:\.\d+)?/g;
+                                        var match = regex.exec(hostname)
+                                        que = match[0];
+                                    } else {
+                                        que = "0";
+                                    }
+                                    var Embed = new Discord.MessageEmbed()
+                                        .setColor("#ff8c00")
+                                        .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
+                                        .setDescription(`:white_check_mark: **Server IP :** connect phoenix-rp.co.uk\n:white_check_mark: **TeamSpeak IP :** ts.phoenix-rp.co.uk\n\n **Server Restart Times** \n` + r + `\n\n **Next Restart :** ` + t)
+                                        .addField('**Players**', players + "/" + maxp, true)
+                                        .addField('**Queue**', que, true)
+                                        .addField('**Server Uptime**', uptime, true)
+                                        .setTimestamp("re")
+                                        .setFooter('Made by Mr.Traktoorn');
+                                    m.edit(Embed);
+                                    online = true;
+                                }
+                                else if (online) {
+                                        var Embed = new Discord.MessageEmbed()
+                                            .setColor("#ff8c00")
+                                            .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
+                                            .setDescription(`:x: **Server IP:** connect phoenix-rp.co.uk\n:white_check_mark: **TeamSpeak IP:** ts.phoenix-rp.co.uk\n\n **Server Restart Times** \n` + r + `\n\n **Next Restart :** Server Down`)
+                                            .addField('**Players**', "0/64", true)
+                                            .addField('**Queue**', "0", true)
+                                            .addField('**Server Uptime**', "Server down", true)
+                                            .setTimestamp("Last updated: ", h, ":", min)
+                                            .setFooter('Made by Mr.Traktoorn');
+                                        m.edit(Embed)
+                                        online = false;
+                                    }
+                            });
+                        }, 20000)
+                    }).catch((error) => { console.log("something went wrong\n"+error) });
+                } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"start`."), false);
+            })
+        }
     }
 
 });
