@@ -41,22 +41,30 @@ function loadDefaultChannel(){
 		}
 	});
 }
+//To do functions
+function awaitResponse(from, channel, matches, data){
+}
 function findMember(guild, name){
     let promise = new Promise((resolve, reject) => {
         name = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); //Escaping bad characters, just in case
         let members = []; //A new array for our matches
         let id = 1;
-        guild.members.cache.tap((member) => {
-            if(member.name.user.username.match(/${name}/gi) != null){
-                members.push('[${id}] ${member.user.tag} ;');
+        let i = 1;
+        guild.members.fetch({query:name, limit:10}).then((response) => {
+            response.each((member) => {
+                members.push(`[#${id}] - Username: ${member.user.username} ; Nickname: ${member.nickname}`);
                 id++;
-            } else if(member.nickname.match(/${name}/gi) != null){
-                members.push('[${id}] ${member.user.tag} ;');
-                id++
-            }
+                if(i == response.size){
+                    resolve(members);
+                } else i++;
+
+            });
         });
-    })
+    });
+
+    return promise;
 }
+//End to do
 function mute(message, until, reason){
     if(until == null)
         until = new Date(0);
@@ -266,9 +274,25 @@ function logMessage(message, content){
 	.setTimestamp(new Date())
 	.addField("Channel:", message.channel.name, true)
 	.addField("By:", message.member.displayName, true)
-	.addField("Member involved: ", "Display name: "+message.mentions.members.first().displayName+"\nID: "+message.mentions.members.first().id, true)
+	.addField("Member involved: ", "**Username:** "+message.mentions.members.first().username+"\n**ID:** "+message.mentions.members.first().id, true)
 
 	return embed;
+}
+function memberListMessage(list){
+    const embed = new Discord.MessageEmbed()
+    .setTitle("Found members:")
+    .setTimestamp(new Date());
+
+    let newList = "";
+    for(let i = 0; i < list.length; i++){
+        newList += list[i]+"\n";
+
+        if(i == list.length - 1){
+            embed.setDescription(newList);
+        }
+    }
+
+    return embed;
 }
 function sendMessage(to, content, private, log){ //If we want to send a private message, we pass user, otherwise pass message
     if(private){
@@ -470,21 +494,6 @@ client.on('message', message => {
             }
         }
     }
-
-    // if(message.attachments != null && message.attachments != undefined && message.attachments.size > 0){
-    //     message.attachments.tap((attachment) => {
-
-    //         let url = attachment.first().url;
-
-    //         if(url.includes(".jpeg") || url.includes(".jpg") || url.includes(".png") || url.includes(".gif")){
-    //             checkMedia(attachment.first().url).then((response) => {
-    //                 if(response.output.detections != null && response.output.detections != undefined && response.output.detections.length > 0){
-    //                     sendMessage(message, infoMessage("Detected:\n"+response.output.detections[0].name+"\nNSFW SCORE: "+response.output.nsfw_score), false);
-    //                 } else sendMessage(message, infoMessage("\nNSFW SCORE: "+response.output.nsfw_score), false);
-    //             });
-    //         }
-    //     });
-    // }
     
     if(message.content[0] == env.prefix){ //If our message starts with a prefix
         let instruction = message.content.substr(1); //Then let's remove the prefix and store it in instruction variable
@@ -629,7 +638,6 @@ client.on('message', message => {
                     if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
                         if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
                             let reason = message.content.split(instruction[1])[1];
-
                             if(reason != null && reason != undefined && reason.length > 0){
                                 reason = reason.trim();
                                 kick(message, reason);
@@ -653,8 +661,6 @@ client.on('message', message => {
                                 reason = message.content.split(instruction[1])[1];
                                 until = new Date(0);
                             }
-                            
-
                             if(reason != null && reason != undefined && reason.length > 0){
                                 reason = reason.trim();
                                 if(message.mentions.members.first().bannable){
@@ -730,10 +736,10 @@ client.on('message', message => {
         } else if(instruction[0] == "set" && instruction[1] == "default" && instruction[2] == "channel"){
             checkPermissions(message.member).then((value) => {
                 if((value != null && value.admin == 1) || message.author.id == message.guild.ownerID){
-                    connection.query("INSERT INTO default_channel VALUES(null, ?, default, ?) ON DUPLICATE KEY UPDATE rid = ?", [message.channel.id, message.author.id, message.channel.id], (err, results, fields) => {
+                    connection.query("INSERT INTO default_channel VALUES(1, ?, default, ?) ON DUPLICATE KEY UPDATE rid = ?", [message.channel.id, message.author.id, message.channel.id], (err, results, fields) => {
                         if(err) console.err("Error while inserting default channel\n"+err)
                         if(results.affectedRows > 0){
-                            sendMessage(message, successMessage("Successfully added a default channel."), false, true);
+                            sendMessage(message, successMessage("Successfully added a default channel."), false);
                             defaultChannel = message.channel;
                         } else sendMessage(message, errorMessage("Unable to add a default channel."), false);
                     });
@@ -741,7 +747,6 @@ client.on('message', message => {
             })
 	    } else if(instruction[0] == "start"){
             //Code by Traktoorn#5566 with slight modification
-
             checkPermissions(message.member).then((value) => {
                 if(value != null && value.admin == 1){
                     var guild = client.guilds.cache.get("653328277359820834");
