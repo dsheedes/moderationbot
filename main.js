@@ -11,7 +11,8 @@ var connection = mysql.createPool({
   host     : env.mysql.host,
   user     : env.mysql.user,
   password : env.mysql.password,
-  database : env.mysql.database
+  database : env.mysql.database,
+  charset  : "utf8mb4"
 });
 
 let roles = new Map(); // Roles will be sorted by role ID
@@ -19,9 +20,9 @@ let specialRoles = new Map();
 let sticky = new Map();
 let defaultChannel;
 
+var uptime = "00h 00m";
+
 // Server status monitor vars
-var min = null
-var h = null
 var t = null
 var r = null
 
@@ -32,6 +33,140 @@ let sevenPM = new Date();
 
 let nextRestart, lastRestart;
 
+function startStatus(){
+    
+                    var guild = client.guilds.cache.get("642408796580347927");
+                    let channel4 = guild.channels.cache.get("642411949908557826");
+
+                    channel4.messages.fetch({limit:100}).then((ms) => { //Clear channel of unnecessary messages
+                        if(ms instanceof Discord.Collection){
+                            ms.each((m) => {
+                                if(m.author != null && m.author != undefined && m.author.bot == true){
+                                    m.delete();
+                                }
+                            });
+                        } else if(m.author != null && m.author != undefined && m.author.bot == true){
+                            m.delete();
+                        }
+                    });
+
+                    var Embed = new Discord.MessageEmbed()
+                        .setColor("#ff8c00")
+                        .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
+                        .setDescription("Im booting up! \n Fetching data...")
+                        .setTimestamp(new Date())
+                        .setFooter('Made by Mr.Traktoorn');
+                    var online = true;
+                    channel4.send(Embed).then((m) => {
+                        setInterval(() => {
+                            //Restart times 
+                            oneAM.setHours(1, 0, 0, 0); //1AM
+                            sevenAM.setHours(7, 0, 0, 0); //7AM
+                            onePM.setHours(13, 0, 0, 0); //1PM
+                            sevenPM.setHours(19, 0, 0, 0); //7PM
+            
+                            //Now we have our restart dates for the current date.
+                            //Let's check where we are in the day right now, and possibly change the dates accordingly.
+                            let rightNow = new Date();
+                            if(rightNow > oneAM){
+                                if(rightNow > sevenAM){
+                                    if(rightNow > onePM){
+                                        if(rightNow > sevenPM){
+                                            //Next restart at 1am, next day
+                                            oneAM.setDate(oneAM.getDate()+1);
+                                            r = "GMT+1 : **1am** | 7am | 1pm | 7pm\nEST : 2am | 8am | 2pm | **8pm**";
+                                            nextRestart = oneAM;
+                                            lastRestart = sevenPM;
+            
+                                            //Since the next restart is tomorrow, we can add a day to all of the times;
+                                            sevenAM.setDate(sevenAM.getDate()+1);
+                                            onePM.setDate(onePM.getDate()+1);
+                                            sevenPM.setDate(sevenPM.getDate()+1);
+                                        } else {
+                                            //Next restart at 7pm
+                                            r = "GMT+1 :  1am | 7am | 1pm | **7pm**\nEST : 2am | 8am | **2pm** | 8pm";
+                                            nextRestart = sevenPM;
+                                            lastRestart = onePM;
+                                        }
+                                    } else {    
+                                        //Next restart at 1pm
+                                        r = "GMT+1 : 1am | 7am |**1pm** | 7pm\nEST : 2am | **8am** | 2pm | 8pm";
+                                        nextRestart = onePM;
+                                        lastRestart = sevenAM;
+                                    }
+                                } else {
+                                    //Next restart at 7am
+                                    r = "GMT+1 :  1am | **7am** | 1pm | 7pm\n EST : **3am** | 9am | 3pm | 9pm";
+                                    nextRestart = sevenAM;
+                                    lastRestart = oneAM;
+                                }
+                            } else {
+                                //Next restart 1am this day
+                                r = "GMT+1 : **1am** | 7am | 1pm | 7pm\nEST : 2am | 8am | 2pm | **8pm**";
+                                nextRestart = oneAM;
+                            }
+                            client.user.setActivity(`${client.users.cache.size} PhoenixRP members!`, { type: 'WATCHING' });
+                            var ja = request('https://servers-live.fivem.net/api/servers/single/kqevrr', { json: true }, async (err, res, body) => {
+                                if (body != null && body != undefined && body.Data != null && body.Data != undefined) {
+                                    var hostname = body['Data']['hostname'];
+                                    var players = body["Data"]["clients"];
+                                    var maxp = body["Data"]["sv_maxclients"];
+            
+                                    if(body['Data']["vars"]['Uptime'] != undefined && body['Data']["vars"]['Uptime'] != null){
+                                        uptime = body['Data']['vars']['Uptime'];
+                                    }
+            
+            
+                                    t = new Date(nextRestart);
+                                    t.setHours(t.getHours() - rightNow.getHours());
+                                    t.setMinutes(t.getMinutes() - rightNow.getMinutes());
+                                    
+                                    t = ("0"+t.getHours()).slice(-2)+"h "+("0"+t.getMinutes()).slice(-2)+"m";
+            
+                                    if (!online){ 
+                                        online = true; 
+                                    }
+                                    var hasQue = false;
+                                    if (hostname[0] == "[") {
+                                        hasQue = true;
+                                    }
+                                    var que = 0;
+                                    if (hasQue) {
+                                        var regex = /[+-]?\d+(?:\.\d+)?/g;
+                                        var match = regex.exec(hostname);
+                                        que = match[0];
+                                    } else {
+                                        que = "0";
+                                    }
+                                    var Embed = new Discord.MessageEmbed()
+                                        .setColor("#ff8c00")
+                                        .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
+                                        .setDescription(`:white_check_mark: **Server IP :** connect phoenix-rp.co.uk\n:white_check_mark: **TeamSpeak IP :** ts.phoenix-rp.co.uk\n\n **Server Restart Times** \n` + r + `\n\n **Next Restart :** ` + t)
+                                        .addField('**Players**', players + "/" + maxp, true)
+                                        .addField('**Queue**', que, true)
+                                        .addField('**Server Uptime**', uptime, true)
+                                        .setTimestamp(new Date())
+                                        .setFooter('Made by Mr.Traktoorn');
+                                    m.edit(Embed);
+                                    online = true;
+                                }
+                                else if (online && res.statusCode == 200) {
+                                        var Embed = new Discord.MessageEmbed()
+                                            .setColor("#ff8c00")
+                                            .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
+                                            .setDescription(`:x: **Server IP:** connect phoenix-rp.co.uk\n:white_check_mark: **TeamSpeak IP:** ts.phoenix-rp.co.uk\n\n **Server Restart Times** \n` + r + `\n\n **Next Restart :** Server Down`)
+                                            .addField('**Players**', "0/64", true)
+                                            .addField('**Queue**', "0", true)
+                                            .addField('**Server Uptime**', "Server down", true)
+                                            .setTimestamp(new Date())
+                                            .setFooter('Made by Mr.Traktoorn');
+                                        m.edit(Embed)
+                                        online = false;
+                                    }
+                            });
+                        }, 30000)
+                    }).catch((error) => { console.log("something went wrong\n"+error) });
+}
 function loadDefaultChannel(){
 	connection.query("SELECT rid FROM default_channel LIMIT 1", [], (err, results, fields) => {
 		if(err) console.log("Error while getting default channel:\n"+err);
@@ -65,17 +200,25 @@ function findMember(guild, name){
     return promise;
 }
 //End to do
-function mute(message, until, reason){
-    if(until == null)
+function mute(message, until, reason, textDuration){
+    let untilString;
+    if(until == null){
         until = new Date(0);
+        untilString = "permanently";
+    } else {
+        textDuration = textDuration.replace("d", "D ");
+        textDuration = textDuration.replace("h", "h ");
+        textDuration = textDuration.replace("m", "min ");
+        textDuration = textDuration.replace("s", "s ");
+        untilString = textDuration;
+        }
 
     connection.query("INSERT INTO mutes VALUES (NULL, ?, DEFAULT, ?, ?, ?, 1)", [message.mentions.members.first().id, until, message.content.split(reason)[1].trim(), message.member.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
             //Successfully muted user, notify user, notify admin/mod, create schedule to remove mute
             sendMessage(message.mentions.members.first(), infoMessage("You've been muted on "+message.guild.name+".").addField("Duration: ", until).addField("Reason: ", message.content.split(reason)[1].trim()), true);
-            sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!"), false, true);
-
+            sendMessage(message, successMessage("User "+message.mentions.members.first().displayName+" successfully muted!\n**Duration:**\n**"+untilString+"**!\n**Reason:**\n"+message.content.split(reason)[1].trim()), false, true, "mute");
             message.mentions.members.first().roles.add(specialRoles.get("mute"));
 
             scheduleUnmute();
@@ -87,7 +230,7 @@ function unmute(message){
     connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [message.mentions.members.first().id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message, successMessage("Successfully unmuted user "+message.mentions.members.first().displayName, false), true);
+            sendMessage(message, successMessage("Successfully unmuted user "+message.mentions.members.first().displayName),false, true, "mute");
             message.mentions.members.first().roles.remove(specialRoles.get("mute"));
             sendMessage(message.mentions.members.first(), successMessage("You've been unmuted from "+message.guild.name+"."), true);
         }
@@ -102,7 +245,7 @@ function warn(message, warning){
     connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, warning[1], message.author.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**").addField("Reason", warning[1], false), false, true);
+            sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**\nReason:\n"+warning[1]), false, true, "warn");
         }
     });
 }
@@ -110,7 +253,7 @@ function removeWarning(message, id){
     connection.query("DELETE FROM warns WHERE id = ?", [id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message, successMessage("Successfully removed warning #"+id), false, true);
+            sendMessage(message, successMessage("Successfully removed warning #"+id), false, true, "warn");
         } else sendMessage(message, errorMessage("Could not find warning ID #"+instruction), false);
     });
 }
@@ -118,44 +261,70 @@ function kick(message, reason){
     connection.query("INSERT INTO kicks VALUES (NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, reason, message.author.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            message.mentions.members.first().kick(reason).then((response) => {
-                //success kick
-                sendMessage(message.mentions.members.first(), infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.disiplayName+"\n**Reason**\n"+reason), true);
-		sendMessage(message, successMessage(`User ${message.mentions.members.first().displayName} successfully kicked!`), false, true); 
-            }).catch((e) => console.log(e));
+            sendMessage(message.mentions.members.first(), infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.displayName+"\n**Reason**\n"+reason), true);
+            setTimeout(() => {
+                message.mentions.members.first().kick(reason).then((response) => {
+                    //success kick
+                    sendMessage(message, successMessage(`User ${message.mentions.members.first().displayName} successfully kicked!\nReason\n${reason}`), false, true, "kick"); 
+                }).catch((e) => console.log(e));
+            }, 2000);
         } else sendMessage(message, errorMessage("Something went wrong while trying to kick this member."), false);
     });
 }
-function ban(message, until, reason){
+function ban(message, until, reason, textDuration){
+    let untilString;
+    if(until == null){
+        untilString = "permanently";
+        until = new Date(0);
+    } else{
+        textDuration = textDuration.replace("d", "D ");
+        textDuration = textDuration.replace("h", "h ");
+        textDuration = textDuration.replace("m", "min ");
+        textDuration = textDuration.replace("s", "s ");
+        untilString = textDuration;
+    }
+
     connection.query("INSERT INTO bans VALUES (NULL, ?, DEFAULT, ?, ?, ?, 1)", [message.mentions.members.first().id, until, reason, message.author.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
             message.channel.createInvite({maxAge:0, maxUses:1, unique:true, reason:"Unban invite."}).then((invite) => {
                 sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+". You can use the invite link once/if your ban expires.\n**Duration:**\n"+until+"\n**Banned by:**\n"+message.member.displayName+"\n**Reason:**\n"+reason), true);
                 sendMessage(message.mentions.members.first(), invite.url, true);
-                sendMessage(message, successMessage("Successfully banned user "+message.mentions.members.first().displayName), false, true);
                 
-                message.mentions.members.first().ban({"reason":reason}).catch((e) => {console.error("Something happened while banning user =>\n"+e); sendMessage(message, errorMessage("Error while banning user."), false)})
-                
-                scheduleUnban();
+                setTimeout(()=>{
+                    message.mentions.members.first().ban({"days":7, "reason":reason}).then((user)=>{
+                        sendMessage(message, successMessage("Successfully banned user **"+user.displayName+"**\n**Duration**:\n"+untilString+"\n**Reason:**\n"+reason), false, true, "ban");
+                        scheduleUnban();
+                    }).catch((e) => {console.error("Something happened while banning user =>\n"+e); sendMessage(message, errorMessage("Error while banning user."), false)})
+                }, 2000);
             }).catch((e) => {console.error("Error while creating invite =>\n"+e)});
         } else sendMessage(message, errorMessage("Something went wrong while trying to ban this member."), false);
     });
 }
 function unban(message, auto){
     let member = null;
+    let mid;
     if(auto != null && auto != undefined){
         member = message;
-    } else {member = message.mentions.members.first(); auto = false};
-    connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [member.id], (err, results, fields) => {
+        mid = message;
+    } else {
+        member = message.content.split(" ")[1].trim();
+        mid = member.id; 
+        var auto = false;
+    }
+
+    connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [mid], (err, results, fields) => {
         if(err) console.error("Error while unbanning =>\n"+err);
-        if(results.affectedRows > 0){   
-            if(auto)
-            message.guild.members.unban(member).then(() => {
-                if(!auto)
-                    sendMessage(message, successMessage("User successfully unbanned."), false, true);
-            }).catch(() => {sendMessage(message, errorMessage("User is not banned."), false);})
-        } else sendMessage(message, errorMessage("User is not banned."), false);
+            if(auto != null && auto != undefined){
+                client.guilds.cache.first().members.unban(member).then((u) => {
+                    defaultChannel.send(logMessage(null, `User **${u.username}** successfully unbanned.`, "ban"));
+                });
+            } else {
+                message.guild.members.unban(member).then((u) => {
+                    if(!auto)
+                        sendMessage(message, successMessage(`User **${u.username}** successfully unbanned.`), false, true, "ban");
+                }).catch((e) => {sendMessage(message, errorMessage("User is not banned."), false); console.log(e)})
+            }
     });
 }
 function removeSticky(cid){
@@ -174,6 +343,11 @@ function removeSticky(cid){
         }
     });
 }
+function updateSticky(cid, nm){
+    connection.query("UPDATE sticky SET mid = ? WHERE cid = ?", [nm.id, cid], (err, results, fields) => {
+        if(err) throw err;
+    });
+}
 function addSticky(message, content){
     // Add or update sticky in the database
     connection.query("REPLACE INTO sticky VALUES(NULL, ?, ?, DEFAULT, ?, ?) ", [message.channel.id, message.id, content, message.author.id], (err, results, fields) => {
@@ -181,11 +355,17 @@ function addSticky(message, content){
         // If we changed anything proceed
         if(results.affectedRows > 0){
             // Create a new embed
-            let s = new Discord.MessageEmbed().setAuthor(message.member.displayName).setTimestamp(new Date()).setDescription(content).setFooter("Sticky message");
+            let s = new Discord.MessageEmbed()
+            .setTimestamp(new Date())
+            .setTitle("**__Stickied Message:__**")
+            .setDescription(content)
+            .setFooter("Sticky message")
+            .setColor(0xFFA500);
             // Send it to the correct channel
             message.channel.send(s).then((m) => {
                 //If the send is successfull, add it to our local sticky Map.
                 sticky.set(m.channel.id, m);
+                message.delete();
             }).catch((e) => {console.error("Something happened while sending sticky message =>\n"+e)});
         } else sendMessage(message, errorMessage("Something happened while trying to create a new sticky message. Try again?"), false);
     });
@@ -219,14 +399,17 @@ function displayInfo(member, type){
     return promise;
 }
 function checkPermissions(member){
+    let i = 0;
     let promise = new Promise((resolve, reject) => {
         roles.forEach((value, key, map) => {
+            i++;
             if(member.roles.cache.has(key)){
                 resolve(value);
             }
+            if(roles.size == i){
+                reject(null);
+            }
         });
-
-        resolve(null);
     });
     return promise;
 }
@@ -266,15 +449,32 @@ function infoMessage(content){
     
     return embed;
 }
-function logMessage(message, content){
-    const embed = new Discord.MessageEmbed()
-	.setTitle(":clipboard: Log")
-	.setColor(0x007bff)
-	.setDescription(content.description)
-	.setTimestamp(new Date())
-	.addField("Channel:", message.channel.name, true)
-	.addField("By:", message.member.displayName, true)
-	.addField("Member involved: ", "**Username:** "+message.mentions.members.first().username+"\n**ID:** "+message.mentions.members.first().id, true)
+function logMessage(message, content, type){
+    let color = 0x007bff;
+    if(type != undefined && type != null){
+        if(type == "warn")
+            color = 0xffc107
+        else if(type == "mute")
+            color = 0xff8307
+        else if(type == "kick")
+            color = 0xbd2130
+        else if(type == "ban")
+            color = 0x117a8b
+    }
+        let embed = new Discord.MessageEmbed()
+        .setTitle(":clipboard: Log")
+        .setColor(color)
+        .setTimestamp(new Date());
+    if(message != null){
+        embed.addField("Channel:", message.channel.name, true)
+        .addField("By:", message.member.displayName, true)
+        .setDescription(content.description);
+        if(message.mentions != null && message.mentions != undefined && message.mentions.members.first() != undefined && message.mentions.members.first() != null){
+            embed.addField("Member involved: ", "**Display name:** "+message.mentions.members.first().displayName+"\n**ID:** "+message.mentions.members.first().id, true);
+        }
+    } else {
+        embed.setDescription(content).addField("By: ", "*Automatic action by PhoenixRP bot.*");
+    }
 
 	return embed;
 }
@@ -294,7 +494,7 @@ function memberListMessage(list){
 
     return embed;
 }
-function sendMessage(to, content, private, log){ //If we want to send a private message, we pass user, otherwise pass message
+function sendMessage(to, content, private, log, type){ //If we want to send a private message, we pass user, otherwise pass message
     if(private){
         to.send(content).catch((e) => {console.error("Error while sending private message =>\n"+e)});
     } else {
@@ -302,7 +502,7 @@ function sendMessage(to, content, private, log){ //If we want to send a private 
     }
     if(log != null && log != undefined && log == true){
         if(defaultChannel != null){
-	    defaultChannel.send(logMessage(to, content));
+	    defaultChannel.send(logMessage(to, content, type));
 	}
     }
 }
@@ -387,38 +587,39 @@ function scheduleUnban(){
         if(results != null && results != undefined && results.length > 0){
             let when = new Date(results[0].duration);
             let uid = results[0].uid;
-            member = client.guilds.cache.first().members.cache.get(uid);
 
             let u = schedule.scheduleJob(when, () => {
-                    unban(member, true);
+                    unban(uid, true);
                 });
         }
     });
 }
 function checkMissed(){
     // In case a bot crashes when it was supposed to unmute/unban it will miss it's cycle. Therefore we need some way of dealing with these cases.
-connection.query("SELECT * FROM mutes WHERE active = 1 AND duration != ?", [new Date(0)], (err, results, fields) => {
-    if(err) console.error("Error while checking missed unmutes.=>\n"+err);
+    connection.query("SELECT * FROM mutes WHERE active = 1 AND duration != ?", [new Date(0)], (err, results, fields) => {
+        if(err) console.error("Error while checking missed unmutes.=>\n"+err);
 
-    for(let i = 0; i < results.length; i++){
-        if(results[i].duration < new Date()){
-            connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [results[i].uid], (err, results, fields) => {
-                if(err) console.error("Error while unmuting uid ${results[i].uid} =>\n"+err);
-            });
+        for(let i = 0; i < results.length; i++){
+            if(results[i].duration < new Date()){
+                connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [results[i].uid], (err, results, fields) => {
+                    if(err) console.error(`Error while unmuting uid ${results[i].uid} =>\n`+err);
+                });
+            }
         }
-    }
-});
-connection.query("SELECT * FROM bans WHERE active = 1 AND duration != ?", [new Date(0)], (err, results, fields) => {
-    if(err) console.error("Error while checking missed unbans.=>\n"+err);
+    });
+    connection.query("SELECT * FROM bans WHERE active = 1 AND duration != ?", [new Date(0)], (err, results, fields) => {
+        if(err) console.error(`Error while checking missed unbans.=>\n`+err);
 
-    for(let i = 0; i < results.length; i++){
-        if(results[i].duration < new Date()){
-            connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [results[i].uid], (err, results, fields) => {
-                if(err) console.error("Error while unmuting uid ${results[i].uid} =>\n"+err);
-            });
+        for(let i = 0; i < results.length; i++){
+            if(results[i].duration < new Date()){
+                mid = results[i].uid
+                connection.query("UPDATE bans SET active = 0 WHERE uid = ?", [results[i].uid], (err, results, fields) => {
+                    if(err) console.error(`Error while unbanning uid ${mid} =>\n`+err);
+                    unban(mid, true);
+                });
+            }
         }
-    }
-});
+    });
 }
 function loadSticky(){
     sticky.clear();
@@ -426,14 +627,59 @@ function loadSticky(){
         if(err) console.error("Error while loading sticky data =>\n"+e);
         if(results.length > 0){
             for(let i = 0; i < results.length; i++){
-                let c = client.channels.cache.get(results[i].cid);
-
-                if(c != null && c != undefined){
-                    let m = c.messages.cache.get(results[i].mid);
-                    if(m != null && m != undefined){
-                        sticky.set(m.channel.id, m.content);
+                client.channels.fetch(results[i].cid).then((c) => {
+                    if(c != null && c != undefined){
+                        c.messages.fetch(results[i].mid).then((m) => {
+                            if(m != null && m != undefined){
+                                c.send(m.embeds[0]).then((nm) => {
+                                    m.delete();
+                                    sticky.set(c.id, nm);
+                                    updateSticky(c.id, nm);
+                                })
+                            }
+                        }).catch(() => {
+                            //Message id got lost, so we need to search for the message
+                            //Unfortunately the limit is 100 messages
+                            c.messages.fetch({limit:100}).then((m) => {
+                                if(m != null && m != undefined){
+                                    if(m instanceof Discord.Collection){ //multiple messages
+                                        m.some((sm) => {
+                                            if(sm.embeds != null && sm.embeds != undefined){
+                                                if(sm.embeds.length > 0 && sm.embeds[0] != null && sm.embeds[0] != undefined){
+                                                    if(sm.embeds[0].footer != null && sm.embeds[0].footer != undefined){
+                                                        if(sm.embeds[0].footer.text == "Sticky message"){                                                                                                                   
+                                                            c.send(sm.embeds[0]).then((nm) => {
+                                                                sm.delete();
+                                                                updateSticky(c.id, nm);
+                                                                sticky.set(c.id, nm);
+                                                                return true;  
+                                                            });
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    } else { //single message
+                                        if(m.embeds != null && m.embeds != undefined){
+                                            if(m.embeds.length > 0 && m.embeds[0] != null && m.embeds[0] != undefined){
+                                                if(m.embeds[0].footer != null && m.embeds[0].footer != undefined){
+                                                    if(m.embeds[0].footer.text == "Sticky message"){
+                                                        c.send(m.embeds[0]).then((nm) => {
+                                                            sm.delete();
+                                                            updateSticky(c.id, nm);
+                                                            sticky.set(c.id, nm);  
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                }
+                            });
+                        });
                     }
-                }
+                });
             }
         }
     });
@@ -477,19 +723,47 @@ client.on('ready', () => {
 
   checkMissed();
 
+  startStatus();
+
 });
 // Create an event listener for messages
 client.on('message', message => {
     if(sticky.size > 0){ //If there are sticky messages.
-    // We need to check if the message is actually a sticky message sent from the bot, if it is not we proceed
-        if(message.content.toLowerCase() != env.prefix+"remove sticky"){
-            if(message.embeds == null || message.embeds == undefined || message.embeds.length == 0 || message.embeds[0].footer.text != "Sticky message"){
-                let m = sticky.get(message.channel.id);
-                if(m != null && m != undefined){
-                    m.channel.send(m.embeds[0]).then((nm) => {
-                        sticky.set(message.channel.id, nm);
+     //We need to check if the message is actually a sticky message sent from the bot, if it is not we proceed
+     let m = sticky.get(message.channel.id);
+        if(m != null && m != undefined){
+            if(message.content.toLowerCase() != env.prefix+"remove sticky"){
+                if(message.embeds == null || message.embeds == undefined || message.embeds.length == 0 || message.embeds[0].footer == undefined||message.embeds[0].footer.text != "Sticky message"){
+                        m.channel.send(m.embeds[0]).then((nm) => {
+                            sticky.set(message.channel.id, nm);
+                            updateSticky(message.channel.id, nm);
+                        }).catch((e) => {console.error("Error while replacing sticky message =>\n"+e)});
                         m.delete();
-                    }).catch((e) => {console.error("Error while replacing sticky message =>\n"+e)});
+                }
+            }
+        }
+    }
+
+    // Status channel
+    if(message.channel.id == "642411949908557826"){
+        if(message.embeds.length == 1){
+            if(message.embeds[0].description != null && message.embeds[0].description != undefined){
+                if(message.embeds[0].description == "Server restarted successfully. You are now able to reconnect."){
+                    setTimeout(()=>{ //We've detected that there is a restart completed, wait 15 minutes and then remove the messages.
+                    client.channels.fetch("642411949908557826").then((c) => {
+                        c.messages.fetch({limit:100}).then((ms) => {
+                            if(ms instanceof Discord.Collection){
+                                ms.each((m) => {
+                                    if(m.author != null && m.author != undefined && m.author.bot == true && m.author.id != "695719904095240203"){
+                                        m.delete();
+                                    }
+                                });
+                            } else if(m.author != null && m.author != undefined && m.author.bot == true && m.author.id != "695719904095240203"){
+                                m.delete();
+                            }
+                        });
+                    })
+                    }, 900000);
                 }
             }
         }
@@ -503,7 +777,6 @@ client.on('message', message => {
         //Add and remove roles that can be administrators/moderators
             //Set permissions for roles such as kick, ban, warn, mute
         //Kick, ban, warn, mute commands
-
         if(instruction[0] == "add"){ //Only owner can issue this command
             checkPermissions(message.member).then((value) => {
                 if((value != null && value.admin == 1) || message.author.id == message.guild.ownerID){
@@ -550,6 +823,7 @@ client.on('message', message => {
                 checkPermissions(message.member).then((value) => {
                     if(value != null && value.sticky == 1){
                         removeSticky(message.channel.id);
+                        message.delete();
                     } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"remove sticky`"), false);
                 }).catch(() => {})
             } else 
@@ -609,8 +883,8 @@ client.on('message', message => {
                                             let string = instruction[2].split("-");
                                             let until = stringToDateTime(string[1]);
 
-                                            if(string[1] != null && string[1] != undefined && string[1].length > 0){
-                                                mute(message, until, string[1]);
+                                            if(string[1] != null && string[1] != undefined && string[1].length > 0 && string[1] != " "){
+                                                mute(message, until, string[1], string[1]);
                                             } else sendMessage(message, errorMessage("You need to have a reason to mute this member. Please try again."), false);
                                             
                                         } else {
@@ -650,35 +924,40 @@ client.on('message', message => {
             checkPermissions(message.member).then((value) => {
                 if(value != null && value.ban == 1){ //If they have the role, and permissions to mute
                     if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
-                        if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
-                            let until = null;
-                            let reason = null;
-                            if(instruction[2][0] == "-"){
-                                string = instruction[2].split("-")[1];
-                                reason = message.content.split(instruction[2])[1];
-                                until = stringToDateTime(string);
-                            } else {
-                                reason = message.content.split(instruction[1])[1];
-                                until = new Date(0);
-                            }
-                            if(reason != null && reason != undefined && reason.length > 0){
-                                reason = reason.trim();
-                                if(message.mentions.members.first().bannable){
-                                    ban(message, until, reason);
-                                } else sendMessage(message, errorMessage("This member is not bannable."), false);
-                            } else sendMessage(message, errorMessage("You cannot ban a member without stating a reason. Please try again."), false);
-                        } else sendMessage(message, errorMessage("Cannot ban. You need more priviledges to ban this user."), false);
+                        if(instruction.length > 2){
+                            if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
+                                let until = null;
+                                let reason = null;
+                                let string = null;
+                                if(instruction[2][0] == "-"){
+                                    string = instruction[2].split("-")[1];
+                                    reason = message.content.split(instruction[2])[1];
+                                    until = stringToDateTime(string);
+                                } else {
+                                    reason = message.content.split(instruction[1])[1];
+                                }
+                                if(reason != null && reason != undefined && reason.length > 0){
+                                    reason = reason.trim();
+                                    if(message.mentions.members.first().bannable){
+                                        ban(message, until, reason, string);
+                                    } else sendMessage(message, errorMessage("This member is not bannable."), false);
+                                } else sendMessage(message, errorMessage("You cannot ban a member without stating a reason. Please try again."), false);
+                            } else sendMessage(message, errorMessage("Cannot ban. You need more priviledges to ban this user."), false);
+                        } else sendMessage(message, errorMessage("You cannot ban a member without stating a reason. Please try again."), false);
                     } else sendMessage(message, errorMessage("You need to mention a member you want to ban first!"), false)
                 } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false);
             }).catch(() => {});
         } else if(instruction[0] == "unban"){
             checkPermissions(message.member).then((value) => {
+                console.log("perms");
                 if(value != null && value.ban == 1){
-                    if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
+                    console.log("perms checked");
+                    if(instruction[1] != null && instruction[1] != undefined && instruction[1].length > 0){
+                        console.log("id sent");
                         unban(message);
-                    } else sendMessage(message, errorMessage("You need to mention a member you want to unban first!"), false);
+                    } else console.log("asd");
                 } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"unban`"), false)
-            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"unban`"), false)});
+            }).catch(() => {});
         } else if(instruction[0] == "role" && message.guild.ownerID == message.member.id){
             if(instruction[1] == "add"){
                 if(instruction[2] == "muted"){
@@ -723,7 +1002,6 @@ client.on('message', message => {
                 }).catch(() => {});
             } else sendMessage(message, errorMessage("You need to mention a user to check their info first."), false);
         } else if(instruction[0] == "sticky"){
-            if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
                 let content = message.content.split(env.prefix+""+instruction[0])[1];
                 if(content != null && content != undefined && content.length > 0){
                     checkPermissions(message.member).then((value) => {
@@ -732,7 +1010,6 @@ client.on('message', message => {
                         } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"sticky`"), false);
                     }).catch(() => {})
                 } else sendMessage(message, errorMessage("You cannot set an empty sticky message!"),false);
-            }
         } else if(instruction[0] == "set" && instruction[1] == "default" && instruction[2] == "channel"){
             checkPermissions(message.member).then((value) => {
                 if((value != null && value.admin == 1) || message.author.id == message.guild.ownerID){
@@ -746,135 +1023,10 @@ client.on('message', message => {
                 } else sendMessage(message, errorMessage("You do not have enough permissions to do this."), false);
             })
 	    } else if(instruction[0] == "start"){
-            //Code by Traktoorn#5566 with slight modification
             checkPermissions(message.member).then((value) => {
                 if(value != null && value.admin == 1){
-                    var guild = client.guilds.cache.get("653328277359820834");
-                    let channel4 = guild.channels.cache.get("688519104096632854");
-                    // message.delete();
-                    var Embed = new Discord.MessageEmbed()
-                        .setColor("#ff8c00")
-                        .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
-                        .setDescription("Im booting up! \n Fetching data...")
-                        .setTimestamp("\u200b")
-                        .setFooter('Made by Mr.Traktoorn');
-                    var online = true;
-                    var m = channel4.send(Embed).then((m) => {
-                        setInterval(() => {
-                            //Restart times 
-                            oneAM.setHours(1, 0, 0, 0); //1AM
-                            sevenAM.setHours(7, 0, 0, 0); //7AM
-                            onePM.setHours(13, 0, 0, 0); //1PM
-                            sevenPM.setHours(19, 0, 0, 0); //7PM
-            
-                            //Now we have our restart dates for the current date.
-                            //Let's check where we are in the day right now, and possibly change the dates accordingly.
-                            let rightNow = new Date();
-                            if(rightNow > oneAM){
-                                if(rightNow > sevenAM){
-                                    if(rightNow > onePM){
-                                        if(rightNow > sevenPM){
-                                            //Next restart at 1am, next day
-                                            oneAM.setDate(oneAM.getDate()+1);
-                                            r = "GMT : **1am** | 7am | 1pm | 7pm\n EST : 3am | 9am | 3pm | **9pm**";
-                                            nextRestart = oneAM;
-                                            lastRestart = sevenPM;
-            
-                                            //Since the next restart is tomorrow, we can add a day to all of the times;
-                                            sevenAM.setDate(sevenAM.getDate()+1);
-                                            onePM.setDate(onePM.getDate()+1);
-                                            sevenPM.setDate(sevenPM.getDate()+1);
-                                        } else {
-                                            //Next restart at 7pm
-                                            r = "GMT :  1am | 7am | 1pm | **7pm**\n EST : 3am | 9am | **3pm** | 9pm";
-                                            nextRestart = sevenPM;
-                                            lastRestart = onePM;
-                                        }
-                                    } else {    
-                                        //Next restart at 1pm
-                                        r = "GMT : 1am | 7am |**1pm** | 7pm\n EST : 3am | **9am** | 3pm | 9pm";
-                                        nextRestart = onePM;
-                                        lastRestart = sevenAM;
-                                    }
-                                } else {
-                                    //Next restart at 7am
-                                    r = "GMT :  1am | **7am** | 1pm | 7pm\n EST : **3am** | 9am | 3pm | 9pm";
-                                    nextRestart = sevenAM;
-                                    lastRestart = oneAM;
-                                }
-                            } else {
-                                //Next restart 1am this day
-                                r = "GMT : **1am** | 7am | 1pm | 7pm\n EST : 3am | 9am | 3pm | **9pm**";
-                                nextRestart = oneAM;
-                            }
-                            client.user.setActivity(`PhoenixRP discord has ${client.users.cache.size} members!`);
-                            var ja = request('https://servers-live.fivem.net/api/servers/single/kqevrr', { json: true }, async (err, res, body) => {
-                                if (body != null && body != undefined && body.Data != null && body.Data != undefined) {
-                                    var now = new Date();
-                                    h = now.getHours();
-                                    min = now.getMinutes();
-            
-                                    h = ("0"+h).slice(-2)+"h";
-                                    min = ("0"+min).slice(-2)+"m";
-            
-                                    var hostname = body['Data']['hostname'];
-                                    var players = body["Data"]["clients"];
-                                    var maxp = body["Data"]["sv_maxclients"];
-                                    var uptime;
-            
-                                    if(body['Data']["vars"]['Uptime'] != undefined && body['Data']["vars"]['Uptime'] != null){
-                                        uptime = body['Data']['vars']['Uptime'];
-                                    } else {
-                                        uptime = new Date(Math.abs(rightNow - lastRestart));
-                                        uptime = ("0" + uptime.getHours()).slice(-2)+"h "+("0" + uptime.getMinutes()).slice(-2)+"m";
-                                    }
-            
-            
-                                    t = new Date(Math.abs(nextRestart - rightNow));
-                                    t = ("0"+t.getHours()).slice(-2)+"h "+("0"+t.getMinutes()).slice(-2)+"m";
-            
-                                    if (!online) { online = true; }
-                                    var hasQue = false;
-                                    if (hostname[0] == "[") {
-                                        hasQue = true;
-                                    }
-                                    var que = 0;
-                                    if (hasQue) {
-                                        var regex = /[+-]?\d+(?:\.\d+)?/g;
-                                        var match = regex.exec(hostname)
-                                        que = match[0];
-                                    } else {
-                                        que = "0";
-                                    }
-                                    var Embed = new Discord.MessageEmbed()
-                                        .setColor("#ff8c00")
-                                        .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
-                                        .setDescription(`:white_check_mark: **Server IP :** connect phoenix-rp.co.uk\n:white_check_mark: **TeamSpeak IP :** ts.phoenix-rp.co.uk\n\n **Server Restart Times** \n` + r + `\n\n **Next Restart :** ` + t)
-                                        .addField('**Players**', players + "/" + maxp, true)
-                                        .addField('**Queue**', que, true)
-                                        .addField('**Server Uptime**', uptime, true)
-                                        .setTimestamp("re")
-                                        .setFooter('Made by Mr.Traktoorn');
-                                    m.edit(Embed);
-                                    online = true;
-                                }
-                                else if (online) {
-                                        var Embed = new Discord.MessageEmbed()
-                                            .setColor("#ff8c00")
-                                            .setAuthor('PhoenixRP', "https://cdn.discordapp.com/attachments/653330374071681035/687607176772190250/LOGORED.png")
-                                            .setDescription(`:x: **Server IP:** connect phoenix-rp.co.uk\n:white_check_mark: **TeamSpeak IP:** ts.phoenix-rp.co.uk\n\n **Server Restart Times** \n` + r + `\n\n **Next Restart :** Server Down`)
-                                            .addField('**Players**', "0/64", true)
-                                            .addField('**Queue**', "0", true)
-                                            .addField('**Server Uptime**', "Server down", true)
-                                            .setTimestamp("Last updated: ", h, ":", min)
-                                            .setFooter('Made by Mr.Traktoorn');
-                                        m.edit(Embed)
-                                        online = false;
-                                    }
-                            });
-                        }, 20000)
-                    }).catch((error) => { console.log("something went wrong\n"+error) });
-                } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"start`."), false);
+                    startStatus();
+                }
             })
         }
     }

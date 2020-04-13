@@ -1,94 +1,76 @@
--- phpMyAdmin SQL Dump
--- version 5.0.1
--- https://www.phpmyadmin.net/
---
--- Host: 127.0.0.1
--- Generation Time: Apr 02, 2020 at 01:45 AM
--- Server version: 10.4.11-MariaDB
--- PHP Version: 7.4.2
-
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-SET AUTOCOMMIT = 0;
-START TRANSACTION;
-SET time_zone = "+00:00";
-
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
-
---
--- Database: `discord_moderation`
---
-
+-- --------------------------------------------------------
+-- Host:                         127.0.0.1
+-- Server version:               10.4.12-MariaDB - mariadb.org binary distribution
+-- Server OS:                    Win64
+-- HeidiSQL Version:             10.2.0.5599
 -- --------------------------------------------------------
 
---
--- Table structure for table `bans`
---
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET NAMES utf8 */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 
-CREATE TABLE `bans` (
-  `id` int(11) NOT NULL,
+
+-- Dumping database structure for discord_moderation
+CREATE DATABASE IF NOT EXISTS `discord_moderation` /*!40100 DEFAULT CHARACTER SET utf8 */;
+USE `discord_moderation`;
+
+-- Dumping structure for table discord_moderation.bans
+CREATE TABLE IF NOT EXISTS `bans` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `uid` varchar(64) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `duration` datetime NOT NULL,
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL,
-  `active` tinyint(1) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `active` tinyint(1) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4;
 
--- --------------------------------------------------------
+-- Data exporting was unselected.
 
---
--- Table structure for table `default_channel`
---
-
-CREATE TABLE `default_channel` (
-  `id` int(11) NOT NULL,
+-- Dumping structure for table discord_moderation.default_channel
+CREATE TABLE IF NOT EXISTS `default_channel` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `rid` varchar(64) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
-  `inserted_by` varchar(64) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `inserted_by` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `rid` (`rid`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4;
 
--- --------------------------------------------------------
+-- Data exporting was unselected.
 
---
--- Table structure for table `kicks`
---
-
-CREATE TABLE `kicks` (
-  `id` int(11) NOT NULL,
+-- Dumping structure for table discord_moderation.kicks
+CREATE TABLE IF NOT EXISTS `kicks` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `uid` varchar(64) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `reason` varchar(2048) DEFAULT NULL,
-  `issued_by` varchar(64) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `issued_by` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4;
 
--- --------------------------------------------------------
+-- Data exporting was unselected.
 
---
--- Table structure for table `mutes`
---
-
-CREATE TABLE `mutes` (
-  `id` int(11) NOT NULL,
+-- Dumping structure for table discord_moderation.mutes
+CREATE TABLE IF NOT EXISTS `mutes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `uid` varchar(64) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `duration` datetime NOT NULL,
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL,
-  `active` tinyint(1) NOT NULL DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4;
 
--- --------------------------------------------------------
+-- Data exporting was unselected.
 
---
--- Table structure for table `permissions`
---
-
-CREATE TABLE `permissions` (
-  `id` int(11) NOT NULL,
+-- Dumping structure for table discord_moderation.permissions
+CREATE TABLE IF NOT EXISTS `permissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `rid` varchar(64) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `mute` tinyint(1) NOT NULL DEFAULT 0,
@@ -96,159 +78,49 @@ CREATE TABLE `permissions` (
   `warn` tinyint(1) NOT NULL DEFAULT 0,
   `ban` tinyint(1) NOT NULL DEFAULT 0,
   `sticky` tinyint(1) NOT NULL DEFAULT 0,
-  `admin` tinyint(1) NOT NULL DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `admin` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4;
 
--- --------------------------------------------------------
+-- Data exporting was unselected.
 
---
--- Table structure for table `roles`
---
-
-CREATE TABLE `roles` (
-  `id` int(11) NOT NULL,
+-- Dumping structure for table discord_moderation.roles
+CREATE TABLE IF NOT EXISTS `roles` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `rid` varchar(64) NOT NULL,
   `type` varchar(16) NOT NULL,
-  `date` datetime NOT NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `date` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `type` (`type`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4;
 
--- --------------------------------------------------------
+-- Data exporting was unselected.
 
---
--- Table structure for table `sticky`
---
-
-CREATE TABLE `sticky` (
-  `id` int(11) NOT NULL,
+-- Dumping structure for table discord_moderation.sticky
+CREATE TABLE IF NOT EXISTS `sticky` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `cid` varchar(64) NOT NULL,
   `mid` varchar(64) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `message` varchar(2048) NOT NULL,
-  `created_by` varchar(64) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `created_by` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=59 DEFAULT CHARSET=utf8mb4;
 
--- --------------------------------------------------------
+-- Data exporting was unselected.
 
---
--- Table structure for table `warns`
---
-
-CREATE TABLE `warns` (
-  `id` int(11) NOT NULL,
+-- Dumping structure for table discord_moderation.warns
+CREATE TABLE IF NOT EXISTS `warns` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `uid` varchar(64) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `reason` varchar(2048) NOT NULL,
-  `issued_by` varchar(64) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `issued_by` varchar(64) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4;
 
---
--- Indexes for dumped tables
---
+-- Data exporting was unselected.
 
---
--- Indexes for table `bans`
---
-ALTER TABLE `bans`
-  ADD PRIMARY KEY (`id`);
-
---
--- Indexes for table `default_channel`
---
-ALTER TABLE `default_channel`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `rid` (`rid`);
-
---
--- Indexes for table `kicks`
---
-ALTER TABLE `kicks`
-  ADD PRIMARY KEY (`id`);
-
---
--- Indexes for table `mutes`
---
-ALTER TABLE `mutes`
-  ADD PRIMARY KEY (`id`);
-
---
--- Indexes for table `permissions`
---
-ALTER TABLE `permissions`
-  ADD PRIMARY KEY (`id`);
-
---
--- Indexes for table `roles`
---
-ALTER TABLE `roles`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `type` (`type`);
-
---
--- Indexes for table `sticky`
---
-ALTER TABLE `sticky`
-  ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `cid` (`cid`,`mid`);
-
---
--- Indexes for table `warns`
---
-ALTER TABLE `warns`
-  ADD PRIMARY KEY (`id`);
-
---
--- AUTO_INCREMENT for dumped tables
---
-
---
--- AUTO_INCREMENT for table `bans`
---
-ALTER TABLE `bans`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `default_channel`
---
-ALTER TABLE `default_channel`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `kicks`
---
-ALTER TABLE `kicks`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `mutes`
---
-ALTER TABLE `mutes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `permissions`
---
-ALTER TABLE `permissions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `roles`
---
-ALTER TABLE `roles`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `sticky`
---
-ALTER TABLE `sticky`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
--- AUTO_INCREMENT for table `warns`
---
-ALTER TABLE `warns`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-COMMIT;
-
+/*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
+/*!40014 SET FOREIGN_KEY_CHECKS=IF(@OLD_FOREIGN_KEY_CHECKS IS NULL, 1, @OLD_FOREIGN_KEY_CHECKS) */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
