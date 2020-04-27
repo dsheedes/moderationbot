@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `bans` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -34,11 +34,12 @@ CREATE TABLE IF NOT EXISTS `bans` (
 CREATE TABLE IF NOT EXISTS `default_channel` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `rid` varchar(64) NOT NULL,
+  `type` varchar(16) NOT NULL,
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `inserted_by` varchar(64) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `rid` (`rid`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -54,6 +55,20 @@ CREATE TABLE IF NOT EXISTS `kicks` (
 
 -- Data exporting was unselected.
 
+-- Dumping structure for table discord_moderation.messages
+CREATE TABLE IF NOT EXISTS `messages` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` varchar(64) NOT NULL DEFAULT '',
+  `type` varchar(32) NOT NULL DEFAULT '',
+  `message` varchar(2048) CHARACTER SET utf8mb4 NOT NULL DEFAULT '',
+  `date` datetime NOT NULL DEFAULT curdate(),
+  `added_by` varchar(64) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `type` (`type`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+
+-- Data exporting was unselected.
+
 -- Dumping structure for table discord_moderation.mutes
 CREATE TABLE IF NOT EXISTS `mutes` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -64,7 +79,7 @@ CREATE TABLE IF NOT EXISTS `mutes` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=141 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -104,8 +119,9 @@ CREATE TABLE IF NOT EXISTS `sticky` (
   `date` datetime NOT NULL DEFAULT current_timestamp(),
   `message` varchar(2048) NOT NULL,
   `created_by` varchar(64) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=59 DEFAULT CHARSET=utf8mb4;
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `cid` (`cid`)
+) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -117,7 +133,7 @@ CREATE TABLE IF NOT EXISTS `warns` (
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
