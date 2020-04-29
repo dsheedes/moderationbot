@@ -2,6 +2,7 @@ const Discord = require('discord.js');
 let schedule = require('node-schedule');
 const request = require('request');
 var moment = require('moment');
+let pm2 = require('pm2');
 
 let env = require('./env.json');
 
@@ -19,6 +20,7 @@ var connection = mysql.createPool({
 let roles = new Map(); // Roles will be sorted by role ID
 let specialRoles = new Map();
 let sticky = new Map();
+let keywords = new Map();
 let welcomeMessage = null;
 
 let blockedSticky = new Map();
@@ -42,6 +44,40 @@ let sevenPM = new Date();
 
 let nextRestart, lastRestart;
 
+function charToEmoji(c){
+	if(c == 0)
+		return "0⃣";
+	else if(c == 1)
+		return "1⃣";
+	else if(c == 2)
+		return "2⃣";
+	else if(c == 3)
+		return "3⃣";
+	else if(c == 4)
+		return "4⃣";
+	else if(c == 5)
+		return "5⃣";
+	else if(c == 6)
+		return "6⃣";
+	else if(c == 7)
+		return "7⃣";
+	else if(c == 8)
+		return "8⃣";
+	else if(c == 9)
+		return "9⃣";
+	else return null;
+}
+function checkMuteStatus(member){
+	connection.query("SELECT * FROM mutes WHERE uid = ? AND active = 1", [member.id], (err, results, fields) => {
+		if(err) throw err;
+		if(results.length > 0){
+			// This member tried to evade a mute. Let's return his mute role and notify staff.
+			member.roles.add(specialRoles.get("mute"));
+			defaultChannel.send(warnMessage(`${member.user.tag} tried to evade a mute.`));
+			scheduleUnmute();
+		}
+	});
+}
 function antiSpam(message){
 	const TIMELIMIT = 1000;
 	if(!message.author.bot){
@@ -620,6 +656,15 @@ function logMessage(message, content, type){
 
 	return embed;
 }
+function keywordMessage(content){
+	let embed = new Discord.MessageEmbed()
+	.setColor(0xff8307)
+	.setDescription(content)
+	.setFooter("Delivered by PhoenixRP Bot", "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256")
+	.setTimestamp(new Date());
+	
+	return embed;
+}
 function pollMessage(message, content){
     let embed = new Discord.MessageEmbed()
     .setFooter(`Poll by: ${message.author.tag}`, "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256")
@@ -631,24 +676,27 @@ function pollMessage(message, content){
 }
 function deletedMessage(message){
 
-    if(message.author != null){
-        uid = `<@${message.author.id}>`;
-    } else uid = `${message.author.tag}`
+	if(message != null){
+		if(message.author != null){
+			uid = `<@${message.author.id}>`;
+		} else uid = `${message.author.tag}`
 
-    const embed = new Discord.MessageEmbed()
-    .setTitle("🗑️ Message deleted")
-    .setColor(0xdc3545)
-    .setTimestamp(new Date())
-    .addField("**User**:", uid, true)
-    .addField("**Channel**:", `<#${message.channel.id}> \`#${message.channel.name}\``, true)
-    .addField("**Content**:", message.content)
-    .setFooter("MID: "+message.id, "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256");
-    
+		const embed = new Discord.MessageEmbed()
+		.setTitle("🗑️ Message deleted")
+		.setColor(0xdc3545)
+		.setTimestamp(new Date())
+		.addField("**User**:", uid, true)
+		.addField("**Channel**:", `<#${message.channel.id}> \`#${message.channel.name}\` `, true)
+		.addField("**Content**:", message.content+" ")
+		.setFooter("MID: "+message.id, "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256");
+		
 
-    if(message.attachments != null && message.attachments.first() != null){
-        embed.addField("**Attachment**:", message.attachments.first().url);
-    }
-    return embed;
+		if(message.attachments != null && message.attachments.first() != null){
+			embed.addField("**Attachment**:", message.attachments.first().url);
+		}
+		return embed;
+	}
+
 }
 function memberListMessage(list){
     const embed = new Discord.MessageEmbed()
@@ -747,7 +795,7 @@ function scheduleUnmute(){
                     connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [member.id], (err, results, fields) => {
                         if(err) throw err;
                         if(results.affectedRows > 0){
-                            if(member != null){ // In case they left the server
+                            if(member != null){ // If they are still in the server
                                 member.roles.remove(specialRoles.get("mute"));
                                 sendMessage(member, successMessage("You've been unmuted from "+client.guilds.cache.first().name+"."), true);
                                 defaultChannel.send(logMessage(null, `User **${member.user.username}** successfully unmuted.`, "mute"));
@@ -892,6 +940,18 @@ function loadSpecialRoles(){
         }
     });
 }
+function loadKeywords(){
+	keywords.clear();
+	connection.query("SELECT keyword, response FROM keywords", [], (err, results, fields) => {
+		if(err) throw err;
+		
+		if(results != null && results.length > 0){
+			for(let i = 0; i < results.length; i++){
+				keywords.set(results[i].keyword, results[i].response);
+			}
+		}
+	});
+}
 client.on('ready', () => {
   console.log('I am ready!');
 
@@ -902,6 +962,7 @@ client.on('ready', () => {
   loadSticky();
   loadDefaultChannel();
   loadWelcome();
+  loadKeywords();
   
   scheduleUnban();
   scheduleUnmute();
@@ -952,8 +1013,6 @@ client.on('message', message => {
         } else blockedSticky.delete(message.channel.id);
     }
 
-
-
     // Status channel
     if(message.channel.id == "642411949908557826"){
         if(message.embeds.length == 1){
@@ -979,8 +1038,6 @@ client.on('message', message => {
         }
     }
     
-
-	
     if(message.content[0] == env.prefix){ //If our message starts with a prefix
         let instruction = message.content.substr(1); //Then let's remove the prefix and store it in instruction variable
         instruction = instruction.trim().toLowerCase().split(" "); //Let's just trim excess whitespaces, move everything to lowercase and split the instruction by whitespaces
@@ -1036,14 +1093,14 @@ client.on('message', message => {
                     if(value != null && value.sticky == 1){
                         removeSticky(message.channel.id);
                         message.delete();
-                    } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"remove sticky`"), false);
-                }).catch(() => {})
+                    }
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"remove sticky`"), false);})
             } else if(instruction[1] == "welcome"){
                 checkPermissions(message.member, "admin").then((value) => {
                     if(value != null && value.admin == 1){
                         removeWelcome(message);
-                    } else sendMessage(message, errorMessage("You do not have enough permissions to remove a welcome message."), false);
-                });
+                    }
+                }).then(() => {sendMessage(message, errorMessage("You do not have enough permissions to remove a welcome message."), false);});
                 
             } else 
             if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){ // If there are roles mentioned
@@ -1085,8 +1142,8 @@ client.on('message', message => {
                                 warn(message, warning);
                                 message.delete();
                         } else sendMessage(message, errorMessage("You need to mention a member in order to warn them!"), false);
-                    } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"warn`"), false);
-            }).catch(() => {});
+                    }
+            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"warn`"), false);});
         } else if(instruction[0] == "mute"){
             //mute @user -time reason
             if(specialRoles.has("mute")){
@@ -1122,13 +1179,12 @@ client.on('message', message => {
                                                 }
                                             }
 
-											console.log(string);
                                             mute(message, until, string);                                            
                                     }
                                 });
                             } else sendMessage(message, errorMessage("You need to mention a member in order to mute them!"), false);
-                        } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);
-                }).catch(() => {});
+                        }
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);});
             } else sendMessage(message, errorMessage("The bot isn't properly configured. You need to add a mute role first!"), false);
         } else if(instruction[0] == "unmute"){
             checkPermissions(message.member, "mute").then((value) => {
@@ -1137,11 +1193,11 @@ client.on('message', message => {
                         unmute(message);
                         message.delete();
                     } else sendMessage(message, errorMessage("You need to mention a member in order to mute them!"), false);
-                } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);
-            }).catch(()=>{});
+                }
+            }).catch(()=>{sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);});
         } else if(instruction[0] == "kick" || instruction[0] == "k"){
             checkPermissions(message.member, "kick").then((value) => {
-                if(value != null && value.kick == 1){ //If they have the role, and permissions to mute
+                if(value != null && value.kick == 1){ //If they have the role, and permissions to kick
                     if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
                         if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
                             let reason = message.content.split(instruction[1])[1];
@@ -1153,8 +1209,8 @@ client.on('message', message => {
                             message.delete();
                         } else sendMessage(message, errorMessage("Cannot kick. This member has higher priviledges than you."), false);
                     } else sendMessage(message, errorMessage("You need to mention a member you want to kick first!"), false)
-                } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"kick`"), false);
-            }).catch(() => {});
+                }
+            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"kick`"), false);});
         } else if(instruction[0] == "ban" || instruction[0] == "b"){
             checkPermissions(message.member, "ban").then((value) => {
                 if(value != null && value.ban == 1){ //If they have the role, and permissions to mute
@@ -1204,8 +1260,8 @@ client.on('message', message => {
                                     } else sendMessage(message, errorMessage("This member is not bannable."), false);
                             } else sendMessage(message, errorMessage("Cannot ban. You need more priviledges to ban this user."), false);
                     } else sendMessage(message, errorMessage("You need to mention a member you want to ban first!"), false)
-                } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false);
-            }).catch(() => {});
+                }
+            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false);});
         } else if(instruction[0] == "unban"){
             checkPermissions(message.member, "ban").then((value) => {
                 if(value != null && value.ban == 1){
@@ -1256,8 +1312,8 @@ client.on('message', message => {
                                 sendMessage(message, response.setTitle("Bans: "), false);
                             } else sendMessage(message, infoMessage("This user has no items on their ban record."), false);
                         }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
-                    } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"info`"), false);
-                }).catch(() => {});
+                    }
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"info`"), false);});
             } else sendMessage(message, errorMessage("You need to mention a user to check their info first."), false);
         } else if(instruction[0] == "sticky"){
                 let content = message.content.split(env.prefix+""+instruction[0])[1];
@@ -1265,8 +1321,8 @@ client.on('message', message => {
                     checkPermissions(message.member, "sticky").then((value) => {
                         if(value != null && value.sticky == 1){
                             addSticky(message, content);
-                        } else sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"sticky`"), false);
-                    }).catch(() => {})
+                        }
+                    }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"sticky`"), false);})
                 } else sendMessage(message, errorMessage("You cannot set an empty sticky message!"),false);
         } else if(instruction[0] == "set" && instruction[1] == "default" && instruction[2] == "channel" && instruction[3] != null){
             checkPermissions(message.member, "admin").then((value) => {
@@ -1292,14 +1348,14 @@ client.on('message', message => {
                                 messageLogChannel = message.channel;
                         } else sendMessage(message, errorMessage("Unable to add a default channel."), false);
                     });
-                } else sendMessage(message, errorMessage("You do not have enough permissions to do this."), false);
-            })
+                } 
+            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to do this."), false);})
 	    } else if(instruction[0] == "start"){
             checkPermissions(message.member, "admin").then((value) => {
                 if(value != null && value.admin == 1){
                     startStatus();
                 }
-            })
+            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to do this."), false)})
         } else if(instruction[0] == "welcome"){
             if(instruction[1] != null && instruction[1] != undefined && instruction[1].length > 0){ // Welcome message exists
                 checkPermissions(message.member, "admin").then((value) => {
@@ -1316,26 +1372,128 @@ client.on('message', message => {
         } else if(instruction[0] == "prune"){
             checkPermissions(message.member, "warn").then((value) => {
                 if(value != null){
-                    if(!isNaN(instruction[1]) && parseInt(instruction[1]) > 0 && parseInt(instruction[1]) <= 100){
-                        message.channel.bulkDelete(parseInt(instruction[1]));
-                    } else sendMessage(message, errorMessage("You need to input the number of messages you want to delete. `0 to 100`"), false);
+					if(message.mentions != null && message.mentions.members != null && message.mentions.members.first()!=null){
+						//We want to delete messages from a member
+						if(!isNaN(instruction[2]) && parseInt(instruction[2]) > 0 && parseInt(instruction[2]) <= 100){
+							let amount = parseInt(instruction[2]);
+							let count = 1;
+							message.channel.messages.cache.some((m) => {
+								if(count <= amount){
+									if(m.author.id == message.mentions.members.first().id){
+										m.delete();
+										count++;
+									}
+								} else return;
+							});
+						} else sendMessage(message, errorMessage("You need to input the number of messages you want to delete. `0 to 100`"), false);
+					} else {
+						// We want to delete x messages
+						if(!isNaN(instruction[1]) && parseInt(instruction[1]) > 0 && parseInt(instruction[1]) <= 100){
+							message.channel.bulkDelete(parseInt(instruction[1]));
+						} else sendMessage(message, errorMessage("You need to input the number of messages you want to delete. `0 to 100`"), false);
+					}
                 } else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
-            });
+            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false)});
         } else if(instruction[0] == "poll"){
             checkPermissions(message.member, "admin").then((value) => {
                 if(value != null && value.admin == 1){
                     message.channel.send(pollMessage(message, message.content.split("poll ")[1])).then((m) => {
                         message.delete();
-                        m.react("👍").then(() => {
-                            m.react("🤷").then(() => {
-                                m.react("👎");
-                            })
-                        })
+						let type = message.content.split("poll ")[1];
+						
+						let typematch = type.match(new RegExp(/[0-9].*/, "g"));
+						if(typematch != null && typematch.length > 1){
+							for(let i = 0; i < typematch.length; i++){
+								m.react(charToEmoji(i+1));
+							}
+						} else {
+							m.react("👍").then(() => {
+								m.react("🤷").then(() => {
+									m.react("👎");
+								})
+							})
+						}
+
                     });
                 }
-            })
-        }
-    }
+            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false)});
+        } else if(instruction[0] == "keyword"){
+			checkPermissions(message.member, "admin").then((value) => {
+				if(value != null && value.admin == 1){
+					if(instruction[1] == "set"){
+						 if(instruction[2] != null && instruction[3] != null){
+							 
+							 let keyword = instruction[2];
+							 let response = message.content.split(keyword+" ")[1].trim();
+							 
+							 connection.query("INSERT INTO keywords VALUES (null, ?, ?, default, ?) ON DUPLICATE KEY UPDATE response = ?, set_by = ?, date = default", [keyword, response, message.member.id, response, message.member.id], (err, results, fields) => {
+								if(err) throw err;
+								
+								if(results != null && results.affectedRows > 0){
+									sendMessage(message, successMessage(`Successfully set new keyword: \`${keyword}\``), false);
+									loadKeywords();
+								} else sendMessage(message, errorMessage("Something went wrong while setting new keyword."), false);
+							});
+						 }
+					} else if(instruction[1] == "remove"){
+						if(instruction[2] != null){
+							connection.query("DELETE FROM keywords WHERE keyword = ?", [instruction[2]], (err, results, fields) => {
+								if(err) throw err;
+								
+								if(results != null && results.affectedRows > 0){
+									sendMessage(message, successMessage("Successfully removed keyword `"+instruction[2]+"`."));
+									loadKeywords();
+								} else sendMessage(message, errorMessage("Something went wrong while removing keyword. Please try again?"), false);
+							})
+						}
+					} else if(instruction[1] == "list"){
+						connection.query("SELECT keyword, response FROM keywords", [], (err, results, fields) => {
+							if(err) throw err;
+							
+							if(results != null && results.length > 0){
+								let embed = new Discord.MessageEmbed()
+								.setDescription("List of current keywords: ")
+								.setColor(0xff8307)
+								.setFooter("Delivered by PhoenixRP Bot", "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256")
+								.setTimestamp(new Date());
+								
+								for(let i = 0; i < results.length; i++){
+									let nr;
+									if(results[i].response.length > 32){
+										nr = results[i].response.substr(0, 32)+"...";
+									} else nr = results[i].response;
+									
+									embed.addField(`${i}. ${results[i].keyword}`, `${nr}`);
+									
+									if(i == results.length - 1){
+										sendMessage(message, embed, false);
+									}
+								}
+							} else sendMessage(message, infoMessage("No keywords set."), false);
+						})
+					}
+				}
+			}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false)})
+
+		} else if(instruction[0] == "status"){
+			checkPermissions(message.member, "admin").then(() => {
+				pm2.describe("main", (err, results) => {
+					let embed = new Discord.MessageEmbed()
+					.setThumbnail("https://cdn0.iconfinder.com/data/icons/streamline-emoji-1/48/093-robot-face-2-512.png")
+					.setFooter("PhoenixRP Bot", "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256")
+					.setColor(0xff8307)
+					.setTimestamp(new Date())
+					.addField("**CPU USAGE:**", results[0].monit.cpu+"%")
+					.addField("**MEMORY USAGE**:", (results[0].monit.memory/1000000).toFixed(2)+"MB")
+					.addField("**UPTIME**:", moment().diff(new Date(results[0].pm2_env.pm_uptime), "hours", true).toFixed(2)+"hours");
+					
+					sendMessage(message, embed, false);
+				});
+			}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)});
+		}
+    } else if(keywords.has(message.content)){
+		sendMessage(message, keywordMessage(keywords.get(message.content)), false);
+	}
 
 });
 client.on("guildBanRemove", (guild, user) => {
@@ -1349,6 +1507,8 @@ client.on("guildMemberAdd", (member) => {
     if(welcomeMessage != null){
         member.send(wMessage(welcomeMessage));
     }
+	
+	checkMuteStatus(member);
 });
 
 client.on("messageDelete", (message) => {
