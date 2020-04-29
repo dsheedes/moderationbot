@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `bans` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=36 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -40,6 +40,19 @@ CREATE TABLE IF NOT EXISTS `default_channel` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `rid` (`rid`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4;
+
+-- Data exporting was unselected.
+
+-- Dumping structure for table discord_moderation.keywords
+CREATE TABLE IF NOT EXISTS `keywords` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `keyword` varchar(16) NOT NULL,
+  `response` varchar(2048) NOT NULL,
+  `date` datetime NOT NULL DEFAULT current_timestamp(),
+  `set_by` varchar(64) NOT NULL DEFAULT 'current_timestamp()',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `keyword` (`keyword`)
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -79,7 +92,7 @@ CREATE TABLE IF NOT EXISTS `mutes` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=141 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=146 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -121,7 +134,7 @@ CREATE TABLE IF NOT EXISTS `sticky` (
   `created_by` varchar(64) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `cid` (`cid`)
-) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=129 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
