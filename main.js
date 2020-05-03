@@ -44,6 +44,91 @@ let sevenPM = new Date();
 
 let nextRestart, lastRestart;
 
+/**
+ * Resolves a Discord.GuildMember or Discord.User from a given message.
+ * @param {Discord.Message} message - The message from which a member or user will be resolved.
+ * @param {string|number} expectedPosition - At which word the mention of a user is expected
+ */
+function resolveMember(message, expectedPosition){
+    // This might take some time and we want to continue doing other things while we're searching.
+    // Resolve returns a member/user or null
+    // Reject error
+
+    let promise = new Promise((resolve, reject) => {
+        // Let's check if we have a mention first, as it is the simplest way of getting a member.
+        if(message.mentions != null && message.mentions.members != null && message.mentions.users.size > 0){
+            // We have a mention, let's see if it is a member or a user
+
+            if(message.mentions.members.first() != null){
+                // We have a member
+                resolve(message.mentions.members.first());
+            } else {
+                // We have a user
+                resolve(message.mentions.users.first());
+            }
+        } else {
+            // We don't have a mention, so we will have to do a search
+            let lookup = message.content.split(" ")[expectedPosition]; // This is our query parameter based on expected input
+            let u = lookup;
+            if(isNaN(lookup)){
+                u = null;
+            } else lookup = null;
+
+            message.guild.members.fetch({user: u, query: lookup, limit:10}).then((members) => {
+
+                if(members instanceof Discord.GuildMember){
+                    resolve(members);
+                } else if(members.size == 1){
+                    // We have a single result, so we can just resolve here;
+                    resolve(members.first());
+                } else if(members.size == 0){
+                    // No members found
+                    resolve(null);
+                } else {
+                    // We have multiple results, so we will have to ask them for a choice.
+                    // Let's just format a message first
+                    message.channel.send(memberSelectionMessage(members));
+
+                    let collector = new Discord.MessageCollector(message.channel, (m) => {
+                        if(m.author.id == message.author.id){
+                            if(!isNaN(m.content) && m.content > 0 && m.content < members.size){
+                                let i = 0;
+                                let nr = parseInt(m.content);
+                                members.some((member) => {
+                                    if(i == nr - 1){
+                                        resolve(member);
+                                        return;
+                                    } else i++;
+                                });
+                            } else collector.stop();
+                        }
+                    }, {time:10000}); // Wait 10 seconds before auto closing the collector
+
+                }
+            }).catch((e) => {
+                console.error(e);
+                reject(e);
+            });
+        }
+    });
+    return promise;
+}
+function memberSelectionMessage(members){
+    let embed = new Discord.MessageEmbed()
+    .setTitle("Multiple members found.")
+    .setDescription("Please select a member from the list by responding with the # number.")
+    .setTimestamp(new Date())
+	.setColor(0xff8307)
+    .setFooter("User search", "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256");
+
+    let id = 1;
+    members.each((value, key) => {
+        embed.addField(`**[#${id}]** - UID: *${key}*`, value.user.tag);
+        id++;
+    });
+
+    return embed;
+}
 function charToEmoji(c){
 	if(c == 0)
 		return "0⃣";
@@ -150,9 +235,11 @@ function whois(member){
     .addField("**User ID**:", member.id)
     .addField("**Joined Discord**: ", moment(member.user.createdAt).format("MMMM Do YYYY, h:mm:ss a")+" - "+moment(member.user.createdAt).fromNow())
     .addField("**Joined server**: ", moment(member.joinedAt).format("MMMM Do YYYY, h:mm:ss a")+" - "+moment(member.joinedAt).fromNow())
-    .addField("**Highest role**: ", member.roles.highest.name)
-    .addField("**Last message**: ", moment(member.lastMessage.createdAt).format("MMMM Do YYYY, h:mm:ss a")+" - "+moment(member.lastMessage.createdAt).fromNow());
-
+    .addField("**Highest role**: ", member.roles.highest.name);
+	
+	if(member.lastMessage != null && member.lastMessage.createdAt != null){
+		embed.addField("**Last message**: ", moment(member.lastMessage.createdAt).format("MMMM Do YYYY, h:mm:ss a")+" - "+moment(member.lastMessage.createdAt).fromNow());
+	} else embed.addField("**Last message**: ", "Not found.");
     return embed;
     
 }
@@ -357,7 +444,7 @@ function findMember(guild, name){
     return promise;
 }
 //End to do
-function mute(message, until, reason, auto){
+function mute(message, until, reason, auto, m){
     let untilString;
 	let member;
 	let issuedByID;
@@ -373,7 +460,7 @@ function mute(message, until, reason, auto){
 		member = message.member;
 		issuedByID = client.user.id;
 	} else {
-		member = message.mentions.members.first();
+		member = m;
 		issuedByID = message.member.id;
 	}
 
@@ -402,12 +489,12 @@ function unmute(message){
         }
     });
 }
-function warn(message, warning){
-    sendMessage(message.mentions.members.first(), warnMessage(warning).addField("Sent by: ", message.member.displayName), true);
-    connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, warning, message.author.id], (err, results, fields) => {
+function warn(message, warning, member){
+    sendMessage(member, warnMessage(warning).addField("Sent by: ", message.member.displayName), true);
+    connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [member.id, warning, message.author.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message, successMessage("Successfully warned user **"+message.mentions.members.first().displayName+"**\nReason:\n"+warning), false, true, "warn");
+            sendMessage(message, successMessage("Successfully warned user **"+member.displayName+"**\nReason:\n"+warning), false, true, "warn");
         }
     });
 }
@@ -419,13 +506,13 @@ function removeWarning(message, id){
         } else sendMessage(message, errorMessage("Could not find warning ID #"+instruction), false);
     });
 }
-function kick(message, reason){
-    connection.query("INSERT INTO kicks VALUES (NULL, ?, DEFAULT, ?, ?)", [message.mentions.members.first().id, reason, message.author.id], (err, results, fields) => {
+function kick(message, reason, member){
+    connection.query("INSERT INTO kicks VALUES (NULL, ?, DEFAULT, ?, ?)", [member.id, reason, message.author.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
-            sendMessage(message.mentions.members.first(), infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.displayName+"\n**Reason**\n"+reason), true);
+            sendMessage(member, infoMessage("You've been kicked from "+message.guild.name+".\nIssued by "+message.author.displayName+"\n**Reason**\n"+reason), true);
             setTimeout(() => {
-                message.mentions.members.first().kick(reason).then((response) => {
+                member.kick(reason).then((response) => {
                     //success kick
                     sendMessage(message, successMessage(`User ${message.mentions.members.first().displayName} successfully kicked!\nReason\n${reason}`), false, true, "kick"); 
                 }).catch((e) => console.log(e));
@@ -433,7 +520,7 @@ function kick(message, reason){
         } else sendMessage(message, errorMessage("Something went wrong while trying to kick this member."), false);
     });
 }
-function ban(message, until, reason, del){
+function ban(message, until, reason, del, uid, member){
     let untilString;
     if(until == null){
         untilString = "never";
@@ -446,19 +533,25 @@ function ban(message, until, reason, del){
         del = 0;
     } else del = 7;
 
-    connection.query("INSERT INTO bans VALUES (NULL, ?, DEFAULT, ?, ?, ?, 1)", [message.mentions.members.first().id, until, reason, message.author.id], (err, results, fields) => {
+	if(uid == null){
+		uid = member;
+	}
+    connection.query("INSERT INTO bans VALUES (NULL, ?, DEFAULT, ?, ?, ?, 1)", [(member == null) ? uid : uid.id, until, reason, message.author.id], (err, results, fields) => {
         if(err) throw err;
         if(results.affectedRows > 0){
             message.channel.createInvite({maxAge:0, maxUses:1, unique:true, reason:"Unban invite."}).then((invite) => {
-                sendMessage(message.mentions.members.first(), infoMessage("You've been banned from "+message.guild.name+". You can use the invite link once/if your ban expires.\n**Expires:**\n"+until+"\n**Banned by:**\n"+message.member.displayName+"\n**Reason:**\n"+reason), true);
-                sendMessage(message.mentions.members.first(), invite.url, true);
+				
+				if(uid.id != null){
+					sendMessage(uid, infoMessage("You've been banned from "+message.guild.name+". You can use the invite link once/if your ban expires.\n**Expires:**\n"+until+"\n**Banned by:**\n"+message.member.displayName+"\n**Reason:**\n"+reason), true);
+					sendMessage(uid, invite.url, true);
+				} 
                 
                 setTimeout(()=>{
-                    message.mentions.members.first().ban({"days":del, "reason":reason}).then((user)=>{
-                        sendMessage(message, successMessage("Successfully banned user **"+user.displayName+"**\n**Expires**:\n"+untilString+"\n**Reason:**\n"+reason), false, true, "ban");
+                    message.guild.members.ban(uid, {"days":del, "reason":reason}).then((user)=>{
+                        sendMessage(message, successMessage("Successfully banned user **"+user.tag+"**\n**Expires**:\n"+untilString+"\n**Reason:**\n"+reason), false, true, "ban");
                         scheduleUnban();
                     }).catch((e) => {console.error("Something happened while banning user =>\n"+e); sendMessage(message, errorMessage("Error while banning user."), false)})
-                }, 2000);
+                }, 1000);
             }).catch((e) => {console.error("Error while creating invite =>\n"+e)});
         } else sendMessage(message, errorMessage("Something went wrong while trying to ban this member."), false);
     });
@@ -1133,15 +1226,19 @@ client.on('message', message => {
                                 //Let them know to enter the command again.
                                 sendMessage(message, errorMessage("You didn't enter a valid value as the warn ID."), false);
                             }
-                        } else if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
-                            let warning = message.content.split(instruction[1]);
-                            if(warning == null  || warning.length == 0 && warning[1] == null || warning[1].length == 0){
-                                //Let's just send them a message first, just in case something goes wrong with inserting into db. They don't need to know we have db problems :D
-                                warning = "none";
-                            } else warning = warning[1].trim();
-                                warn(message, warning);
-                                message.delete();
-                        } else sendMessage(message, errorMessage("You need to mention a member in order to warn them!"), false);
+                        } else {
+							resolveMember(message, 1).then((member) => {
+								if(member != null){
+									let warning = message.content.split(instruction[1]);
+									if(warning == null  || warning.length == 0 && warning[1] == null || warning[1].length == 0){
+										//Let's just send them a message first, just in case something goes wrong with inserting into db. They don't need to know we have db problems :D
+										warning = "none";
+									} else warning = warning[1].trim();
+										warn(message, warning, member);
+										message.delete();
+									} else sendMessage(message, errorMessage("Could not find that member."), false);
+							}).catch(e => console.error(e));
+						}
                     }
             }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"warn`"), false);});
         } else if(instruction[0] == "mute"){
@@ -1151,37 +1248,43 @@ client.on('message', message => {
                     if(value != null && value.mute == 1){
                             //They have permissions.
                             //Now we can check if they composed the message properly
+							
+							resolveMember(message, 1).then((member) => {
+								if(member != null){
+									connection.query("SELECT * FROM mutes WHERE uid = ? AND active = 1", [member.id], (err, results, fields) => {
+										if(err) throw err;
+
+										if(results.length > 0){
+											sendMessage(message, errorMessage("This user is already muted!"), false);
+										} else {
+												let string = null;
+												let until;
+
+												if(instruction.length > 2){
+													until = stringToDateTime(instruction[2]);
+												} else {
+													until = null;
+													string = "none";
+												}
+
+												if(string == null){
+													if(until == null){
+														string = message.content.split(instruction[1])[1].trim();
+													} else {
+														if(instruction[3] != null){
+															string = message.content.split(instruction[2])[1].trim();
+														} else string = "none";
+														
+													}
+												}
+
+												mute(message, until, string, null, member);                                            
+										}
+									});
+								} else sendMessage(message, errorMessage("Could not find this member."), false);
+							})
                             if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
-                                connection.query("SELECT * FROM mutes WHERE uid = ? AND active = 1", [message.mentions.members.first().id], (err, results, fields) => {
-                                    if(err) throw err;
 
-                                    if(results.length > 0){
-                                        sendMessage(message, errorMessage("This user is already muted!"), false);
-                                    } else {
-                                            let string = null;
-                                            let until;
-
-                                            if(instruction.length > 2){
-                                                until = stringToDateTime(instruction[2]);
-                                            } else {
-                                                until = null;
-                                                string = "none";
-                                            }
-
-                                            if(string == null){
-                                                if(until == null){
-                                                    string = message.content.split(instruction[1])[1].trim();
-                                                } else {
-													if(instruction[3] != null){
-														string = message.content.split(instruction[2])[1].trim();
-													} else string = "none";
-                                                    
-                                                }
-                                            }
-
-                                            mute(message, until, string);                                            
-                                    }
-                                });
                             } else sendMessage(message, errorMessage("You need to mention a member in order to mute them!"), false);
                         }
                 }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"mute`"), false);});
@@ -1198,31 +1301,31 @@ client.on('message', message => {
         } else if(instruction[0] == "kick" || instruction[0] == "k"){
             checkPermissions(message.member, "kick").then((value) => {
                 if(value != null && value.kick == 1){ //If they have the role, and permissions to kick
-                    if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
-                        if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
-                            let reason = message.content.split(instruction[1])[1];
-                            if(reason == null || reason.length == 0){
-                                reason = "none";
-                            } 
-                            reason = reason.trim();
-                            kick(message, reason);
-                            message.delete();
-                        } else sendMessage(message, errorMessage("Cannot kick. This member has higher priviledges than you."), false);
-                    } else sendMessage(message, errorMessage("You need to mention a member you want to kick first!"), false)
+					resolveMember(message, 1).then((member) => {
+						if(member != null){
+							if(message.member.roles.highest.comparePositionTo(member.roles.highest) > 0){
+								let reason = message.content.split(instruction[1])[1];
+								if(reason == null || reason.length == 0){
+									reason = "none";
+								} 
+								reason = reason.trim();
+								kick(message, reason, member);
+								message.delete();
+							} else sendMessage(message, errorMessage("Cannot kick. This member has higher priviledges than you."), false);	
+						}
+					});
                 }
             }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"kick`"), false);});
         } else if(instruction[0] == "ban" || instruction[0] == "b"){
             checkPermissions(message.member, "ban").then((value) => {
                 if(value != null && value.ban == 1){ //If they have the role, and permissions to mute
-                    if(message.mentions != null && message.mentions != undefined && message.mentions.members != null && message.mentions.members != undefined){
-                            if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
-                                let until = null;
+				let until = null;
                                 let string = null;
                                 let del;
-
+								let ep;
                                 if(instruction[1][0] == "d"){
                                     del = 7;
-
+									ep = 2;
                                     if(instruction.length > 3){
                                         until = stringToDateTime(instruction[2]);
                                     } else {
@@ -1239,6 +1342,7 @@ client.on('message', message => {
                                     }
                                 } else {
                                     del = null;
+									ep = 1;
                                     if(instruction.length > 2){
                                         until = stringToDateTime(instruction[2]);
                                     } else {
@@ -1254,14 +1358,27 @@ client.on('message', message => {
                                         }
                                     }
                                 }
+					resolveMember(message, ep).then((member) => {
+						if(member != null){
+							if(message.member.roles.highest.comparePositionTo(message.mentions.members.first().roles.highest) > 0){
                                     if(message.mentions.members.first().bannable){
-                                        ban(message, until, string, del);
+                                        ban(message, until, string, del, null, member);
                                         message.delete();
                                     } else sendMessage(message, errorMessage("This member is not bannable."), false);
                             } else sendMessage(message, errorMessage("Cannot ban. You need more priviledges to ban this user."), false);
-                    } else sendMessage(message, errorMessage("You need to mention a member you want to ban first!"), false)
+						} else {
+							if(del == 7){
+									ban(message, until, string, del, instruction[2], null);
+									message.delete();
+							} else {
+									ban(message, until, string, del, instruction[1], null);
+									message.delete();
+							}
+						}
+						
+					})
                 }
-            }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false);});
+            }).catch((e) => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false); console.log(e)});
         } else if(instruction[0] == "unban"){
             checkPermissions(message.member, "ban").then((value) => {
                 if(value != null && value.ban == 1){
@@ -1289,32 +1406,34 @@ client.on('message', message => {
         } else if(instruction[0] == "unicorn"){
             message.reply("🦄");
         } else if(instruction[0] == "info"){
-            if(message.mentions != null && message.mentions != undefined && message.mentions.roles != null && message.mentions.roles != undefined){
                 checkPermissions(message.member, "mute").then((value) => {
                     if(value != null){
-                        displayInfo(message.mentions.members.first(), "warn").then((response) => {
-                            if(response != null){
-                                sendMessage(message, response.setTitle("Warnings: "), false);
-                            } else sendMessage(message, infoMessage("This user has no items on their warn record."), false);
-                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)});
-                        displayInfo(message.mentions.members.first(), "mute").then((response) => {
-                            if(response != null){
-                                sendMessage(message, response.setTitle("Mutes: "), false);
-                            } else sendMessage(messag, infoMessage("This user has no items on their mute record."), false);
-                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
-                        displayInfo(message.mentions.members.first(), "kick").then((response) => {
-                            if(response != null){
-                                sendMessage(message, response.setTitle("Kicks: "), false);
-                            } else sendMessage(message, infoMessage("This user has no items on their kick record."), false);
-                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
-                        displayInfo(message.mentions.members.first(), "ban").then((response) => {
-                            if(response != null){
-                                sendMessage(message, response.setTitle("Bans: "), false);
-                            } else sendMessage(message, infoMessage("This user has no items on their ban record."), false);
-                        }).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
+                        resolveMember(message, 1).then((member) => {
+							if(member != null){
+								displayInfo(member, "warn").then((response) => {
+									if(response != null){
+										sendMessage(message, response.setTitle("Warnings: "), false);
+									} else sendMessage(message, infoMessage("This user has no items on their warn record."), false);
+								}).catch((e) => {console.error("Error while trying to display info =>\n"+e)});
+								displayInfo(member, "mute").then((response) => {
+									if(response != null){
+										sendMessage(message, response.setTitle("Mutes: "), false);
+									} else sendMessage(messag, infoMessage("This user has no items on their mute record."), false);
+								}).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
+								displayInfo(member, "kick").then((response) => {
+									if(response != null){
+										sendMessage(message, response.setTitle("Kicks: "), false);
+									} else sendMessage(message, infoMessage("This user has no items on their kick record."), false);
+								}).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
+								displayInfo(member, "ban").then((response) => {
+									if(response != null){
+										sendMessage(message, response.setTitle("Bans: "), false);
+									} else sendMessage(message, infoMessage("This user has no items on their ban record."), false);
+								}).catch((e) => {console.error("Error while trying to display info =>\n"+e)})
+							}
+						})
                     }
                 }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"info`"), false);});
-            } else sendMessage(message, errorMessage("You need to mention a user to check their info first."), false);
         } else if(instruction[0] == "sticky"){
                 let content = message.content.split(env.prefix+""+instruction[0])[1];
                 if(content != null && content != undefined && content.length > 0){
@@ -1366,9 +1485,11 @@ client.on('message', message => {
                 });
             }
         } else if(instruction[0] == "whois"){
-            if(message.mentions != null && message.mentions != undefined && message.mentions.members != undefined && message.mentions.members != null){
-                sendMessage(message, whois(message.mentions.members.first()), false);
-            }
+			resolveMember(message, 1).then((member) => {
+				if(member != null){
+					sendMessage(message, whois(member), false);
+				} else sendMessage(message, errorMessage("Could not find this member."), false);
+			})
         } else if(instruction[0] == "prune"){
             checkPermissions(message.member, "warn").then((value) => {
                 if(value != null){
