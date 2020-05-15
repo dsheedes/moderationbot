@@ -113,6 +113,10 @@ function resolveMember(message, expectedPosition){
     });
     return promise;
 }
+/**
+ * Creates a Discord.RichEmbed as a way of presenting data to be selected by user
+ * @param {Discord.GuildMember | Collection<GuildMember>} members - Returned guild member or a collection of guild members
+ */
 function memberSelectionMessage(members){
     let embed = new Discord.MessageEmbed()
     .setTitle("Multiple members found.")
@@ -129,6 +133,10 @@ function memberSelectionMessage(members){
 
     return embed;
 }
+/**
+ * Coverts a number character to an emoji. Used for creating reactions
+ * @param {string} c - A character from 0 to 9
+ */
 function charToEmoji(c){
 	if(c == 0)
 		return "0⃣";
@@ -152,6 +160,10 @@ function charToEmoji(c){
 		return "9⃣";
 	else return null;
 }
+/**
+ * Checks if a joining member has a previous mute and assigns the mute role back to them.
+ * @param {Discord.GuildMember} member 
+ */
 function checkMuteStatus(member){
 	connection.query("SELECT * FROM mutes WHERE uid = ? AND active = 1", [member.id], (err, results, fields) => {
 		if(err) throw err;
@@ -163,8 +175,12 @@ function checkMuteStatus(member){
 		}
 	});
 }
+/**
+ * Anti spam functionality that checks a message for role tags, mass user tags and spam.
+ * @param {Discord.Message} message - Message that will be checked for spam
+ */
 function antiSpam(message){
-	const TIMELIMIT = 1000;
+	const TIMELIMIT = 800;
 	if(!message.author.bot){
 		checkPermissions(message.member, "mute").then(() => {
 			// They got the permissions, so we will just skip
@@ -224,6 +240,10 @@ function antiSpam(message){
 		});	
 	}
 }
+/**
+ * Generates a Discord.RichEmbed of whois information for a user
+ * @param {Discord.GuildMember} member - Member whos data will be presented
+ */
 function whois(member){    
     const embed = new Discord.MessageEmbed()
     .setAuthor(member.user.tag, member.user.avatarURL())
@@ -243,6 +263,10 @@ function whois(member){
     return embed;
     
 }
+/**
+ * Removes the welcome message that was previously set
+ * @param {Discord.Message} message 
+ */
 function removeWelcome(message){
     connection.query("DELETE FROM messages WHERE type = 'welcome'", [], (err, results, fields) => {
         if(err) console.error(err);
@@ -252,6 +276,9 @@ function removeWelcome(message){
         } else sendMessage(message, errorMessage("Something went wrong while deleting a welcome message. Perhaps it doesn't exist?"), false);
     });
 }
+/**
+ * Loads the welcome message from the database into a local variable
+ */
 function loadWelcome(){
     connection.query("SELECT message FROM messages WHERE type = 'welcome'", [], (err, results, fields) => {
         if(err) console.error(err);
@@ -261,6 +288,10 @@ function loadWelcome(){
         }
     });
 }
+/**
+ * Based on the instruction from the message, sets a new welcome message that will be sent to each new discord server member
+ * @param {Discord.Message} message 
+ */
 function setWelcome(message){
     connection.query("REPLACE INTO messages VALUES(null, ?, 'welcome', ?, default, ?)", [message.guild.id, message.content.split(env.prefix+"welcome ")[1], message.author.id], (err, results, fields) => {
         if(err) console.error(err);
@@ -405,6 +436,9 @@ function startStatus(){
                         }, 5000)
                     }).catch((error) => { console.log("something went wrong\n"+error) });
 }
+/**
+ * Loads the default channel from the database into a local variable
+ */
 function loadDefaultChannel(){
 	connection.query("SELECT * FROM default_channel", [], (err, results, fields) => {
 		if(err) console.log("Error while getting default channel:\n"+err);
@@ -420,30 +454,14 @@ function loadDefaultChannel(){
 		}
 	});
 }
-//To do functions
-function awaitResponse(from, channel, matches, data){
-}
-function findMember(guild, name){
-    let promise = new Promise((resolve, reject) => {
-        name = name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); //Escaping bad characters, just in case
-        let members = []; //A new array for our matches
-        let id = 1;
-        let i = 1;
-        guild.members.fetch({query:name, limit:10}).then((response) => {
-            response.each((member) => {
-                members.push(`[#${id}] - Username: ${member.user.username} ; Nickname: ${member.nickname}`);
-                id++;
-                if(i == response.size){
-                    resolve(members);
-                } else i++;
-
-            });
-        });
-    });
-
-    return promise;
-}
-//End to do
+/**
+ * Assigns a muted role based on instructions from the message. It can have a duration or be permanent. It can have a reason.
+ * @param {Discord.Message} message 
+ * @param {Date | null} until 
+ * @param {string} reason 
+ * @param {boolean} auto 
+ * @param {Discord.GuildMember} m 
+ */
 function mute(message, until, reason, auto, m){
     let untilString;
 	let member;
@@ -478,6 +496,10 @@ function mute(message, until, reason, auto, m){
         }
     });
 }
+/**
+ * Unmutes a user based on the mention in the message.
+ * @param {Discord.Message} message 
+ */
 function unmute(message){
     connection.query("UPDATE mutes SET active = 0 WHERE uid = ?", [message.mentions.members.first().id], (err, results, fields) => {
         if(err) throw err;
@@ -489,6 +511,12 @@ function unmute(message){
         }
     });
 }
+/**
+ * Warns a user based on instructions from the message
+ * @param {Discord.Message} message - Message containing instructions and other data
+ * @param {string} warning - Reason for warning the member
+ * @param {Discord.GuildMember} member - Member to be warned
+ */
 function warn(message, warning, member){
     sendMessage(member, warnMessage(warning).addField("Sent by: ", message.member.displayName), true);
     connection.query("INSERT INTO warns VALUES(NULL, ?, DEFAULT, ?, ?)", [member.id, warning, message.author.id], (err, results, fields) => {
@@ -498,6 +526,11 @@ function warn(message, warning, member){
         }
     });
 }
+/**
+ * Removes a warning from a user based on the instruction from the message
+ * @param {Discord.Message} message 
+ * @param {number} id 
+ */
 function removeWarning(message, id){
     connection.query("DELETE FROM warns WHERE id = ?", [id], (err, results, fields) => {
         if(err) throw err;
@@ -506,6 +539,12 @@ function removeWarning(message, id){
         } else sendMessage(message, errorMessage("Could not find warning ID #"+instruction), false);
     });
 }
+/**
+ * Kicks a user from the discord server.
+ * @param {Discord.Message} message - A message containing instructions
+ * @param {string} reason - Reason for kicking the member
+ * @param {Discord.GuildMember} member - Member to be kicked
+ */
 function kick(message, reason, member){
     connection.query("INSERT INTO kicks VALUES (NULL, ?, DEFAULT, ?, ?)", [member.id, reason, message.author.id], (err, results, fields) => {
         if(err) throw err;
@@ -520,6 +559,15 @@ function kick(message, reason, member){
         } else sendMessage(message, errorMessage("Something went wrong while trying to kick this member."), false);
     });
 }
+/**
+ * Bans a user from the discord server. Can be permanent or temporary.
+ * @param {Discord.Message} message - Message containing the instruction and other important data
+ * @param {Date | null} until  - Date until the ban will last or null for permanent
+ * @param {string} reason - The reason for a ban.
+ * @param {*} del - Data that signifies if a member should have their messages removed or not
+ * @param {string} uid - User id, used in offline bans
+ * @param {Discord.GuildMember} member - Member to be banned
+ */
 function ban(message, until, reason, del, uid, member){
     let untilString;
     if(until == null){
@@ -548,7 +596,7 @@ function ban(message, until, reason, del, uid, member){
                 
                 setTimeout(()=>{
                     message.guild.members.ban(uid, {"days":del, "reason":reason}).then((user)=>{
-                        sendMessage(message, successMessage("Successfully banned user **"+user.tag+"**\n**Expires**:\n"+untilString+"\n**Reason:**\n"+reason), false, true, "ban");
+                        sendMessage(message, successMessage("Successfully banned user **"+user.user.tag+"**\n**Expires**:\n"+untilString+"\n**Reason:**\n"+reason), false, true, "ban");
                         scheduleUnban();
                     }).catch((e) => {console.error("Something happened while banning user =>\n"+e); sendMessage(message, errorMessage("Error while banning user."), false)})
                 }, 1000);
@@ -556,6 +604,11 @@ function ban(message, until, reason, del, uid, member){
         } else sendMessage(message, errorMessage("Something went wrong while trying to ban this member."), false);
     });
 }
+/**
+ * Unbans a user from the discord server
+ * @param {Discord.Message} message - Message containing ban instructions and other important data
+ * @param {*} auto - Data that signifies if this unban is automatic or not.
+ */
 function unban(message, auto){
     let member = null;
     let mid;
@@ -584,6 +637,10 @@ function unban(message, auto){
             }
     });
 }
+/**
+ * Removes a sticky message from the current channel
+ * @param {string} cid - Channel id of the current sticky message
+ */
 function removeSticky(cid){
     connection.query("DELETE FROM sticky WHERE cid = ?", [cid], (err, results, fields) => {
         if(err) console.error("Something went wrong while removing a sticky message =>\n"+err);
@@ -600,11 +657,21 @@ function removeSticky(cid){
         }
     });
 }
+/**
+ * Updates the database with new sticky message information
+ * @param {string} cid 
+ * @param {Discord.Message} nm 
+ */
 function updateSticky(cid, nm){
     connection.query("UPDATE sticky SET mid = ? WHERE cid = ?", [nm.id, cid], (err, results, fields) => {
         if(err) throw err;
     });
 }
+/**
+ * Inserts a new sticky message into the database and posts the sticky message to the current channel.
+ * @param {Discord.Message} message - Message containing sticky instructions and other important data
+ * @param {string} content - Content of the sticky message
+ */
 function addSticky(message, content){
     // Add or update sticky in the database
     connection.query("REPLACE INTO sticky VALUES(NULL, ?, ?, DEFAULT, ?, ?) ", [message.channel.id, message.id, content, message.author.id], (err, results, fields) => {
@@ -628,6 +695,11 @@ function addSticky(message, content){
         } else sendMessage(message, errorMessage("Something happened while trying to create a new sticky message. Try again?"), false);
     });
 }
+/**
+ * Retrieves punishment information about a member from the database
+ * @param {Discord.GuildMember} member - A member whos data we need to look up
+ * @param {string} type - Type of the data we need to look up
+ */
 function displayInfo(member, type){
     let promise = new Promise((resolve, reject) => {
         var t;
@@ -656,6 +728,11 @@ function displayInfo(member, type){
     });
     return promise;
 }
+/**
+ * Checks permissions of a guild member
+ * @param {Discord.GuildMember} member - Discord guild member whos permissions should be checked
+ * @param {string} lookFor - Type of permission that should be checked
+ */
 function checkPermissions(member, lookFor){
     let i = 0;
     let promise = new Promise((resolve, reject) => {
@@ -673,6 +750,10 @@ function checkPermissions(member, lookFor){
     });
     return promise;
 }
+/**
+ * Generates a Discord.RichEmbed success message
+ * @param {string} content - Content of the message
+ */
 function successMessage(content){
     const embed = new Discord.MessageEmbed()
     .setTitle("✅ Success!")
@@ -682,6 +763,10 @@ function successMessage(content){
 
     return embed;
 }
+/**
+ * Generates a Discord.RichEmbed error message
+ * @param {string} content - Content of the message
+ */
 function errorMessage(content){
     const embed = new Discord.MessageEmbed()
     .setTitle("❌ Error!")
@@ -691,6 +776,10 @@ function errorMessage(content){
 
     return embed;
 }
+/**
+ * Generates a Discord.RichEmbed warning message
+ * @param {string} content - Content of the message
+ */
 function warnMessage(content){
     const embed = new Discord.MessageEmbed()
     .setTitle("⚠️ Warning!")
@@ -700,6 +789,10 @@ function warnMessage(content){
 
     return embed;
 }
+/**
+ * Generates a Discord.RichEmbed info message
+ * @param {string} content - Content of the message
+ */
 function infoMessage(content){
     const embed = new Discord.MessageEmbed()
     .setTitle("ℹ️ Info message!")
@@ -709,6 +802,10 @@ function infoMessage(content){
     
     return embed;
 }
+/**
+ * Generates a Discord.RichEmbed welcome message
+ * @param {string} content - Content of the message
+ */
 function wMessage(content){
     const embed = new Discord.MessageEmbed()
     .setTitle("Welcome to PhoenixRP!")
@@ -720,6 +817,12 @@ function wMessage(content){
     
     return embed;
 }
+/**
+ * Generates a Discord.RichEmbed log message
+ * @param {Discord.Message} message - Message containing instructions and other important data
+ * @param {string} content - Content of the log message
+ * @param {string} type - Type of the log message
+ */
 function logMessage(message, content, type){
     let color = 0x007bff;
     if(type != undefined && type != null){
@@ -749,6 +852,10 @@ function logMessage(message, content, type){
 
 	return embed;
 }
+/**
+ * Generates a Discord.RichEmbed keyword / auto response message
+ * @param {string} content - Content of the message
+ */
 function keywordMessage(content){
 	let embed = new Discord.MessageEmbed()
 	.setColor(0xff8307)
@@ -758,6 +865,11 @@ function keywordMessage(content){
 	
 	return embed;
 }
+/**
+ * Generates a Discord.RichEmbed poll message
+ * @param {Discord.Message} message - Message containing instructions and other important data
+ * @param {string} content - Content of the message
+ */
 function pollMessage(message, content){
     let embed = new Discord.MessageEmbed()
     .setFooter(`Poll by: ${message.author.tag}`, "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256")
@@ -767,6 +879,10 @@ function pollMessage(message, content){
 
     return embed;
 }
+/**
+ * Generates a Discord.RichEmbed deleted message
+ * @param {Discord.Message} message - Message that was deleted
+ */
 function deletedMessage(message){
 
 	if(message != null){
@@ -780,7 +896,7 @@ function deletedMessage(message){
 		.setTimestamp(new Date())
 		.addField("**User**:", uid, true)
 		.addField("**Channel**:", `<#${message.channel.id}> \`#${message.channel.name}\` `, true)
-		.addField("**Content**:", message.content+" ")
+		.setDescription("**Content**:\n"+message.content+" ")
 		.setFooter("MID: "+message.id, "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256");
 		
 
@@ -791,22 +907,14 @@ function deletedMessage(message){
 	}
 
 }
-function memberListMessage(list){
-    const embed = new Discord.MessageEmbed()
-    .setTitle("Found members:")
-    .setTimestamp(new Date());
-
-    let newList = "";
-    for(let i = 0; i < list.length; i++){
-        newList += list[i]+"\n";
-
-        if(i == list.length - 1){
-            embed.setDescription(newList);
-        }
-    }
-
-    return embed;
-}
+/**
+ * Sends a message to a specific user or channel based on parameters
+ * @param {Discord.GuildMember | Discord.Message} to - User or message.channel to which this message will be sent
+ * @param {string} content - Content of the message to be sent
+ * @param {boolean} private - If a message should be a DM or not
+ * @param {boolean} log - Indicates if this message is a log message, sent to the specific log channel.
+ * @param {string} type - Type of the log message
+ */
 function sendMessage(to, content, private, log, type){ //If we want to send a private message, we pass user, otherwise pass message
     if(private){
         to.send(content).catch((e) => {console.error("Error while sending private message =>\n"+e)});
@@ -819,6 +927,10 @@ function sendMessage(to, content, private, log, type){ //If we want to send a pr
 	}
     }
 }
+/**
+ * Converts a string to javascript Date()
+ * @param {string} string - A string that should be converted into date. Example: 30d2h5m1s
+ */
 function stringToDateTime(string){
     //day, hour, minute, second
 
@@ -867,12 +979,9 @@ function stringToDateTime(string){
     else return date;
 
 }
-
-// Scheduling
-    // Select the nearest date from the database.
-    // Create schedule for that date
-    // Once that schedule process is complete - repeat
-
+/**
+ * Grabs data from the database and schedules an unmute for the nearest date.
+ */
 function scheduleUnmute(){
     connection.query("SELECT * FROM mutes WHERE duration > NOW() AND active = 1 ORDER BY duration LIMIT 1", [], (err, results, fields) => {
         if(err) console.error("Something went wrong while scheduling unmute =>\n"+err);
@@ -905,6 +1014,9 @@ function scheduleUnmute(){
     });
     
 }
+/**
+ * Grabs data from the database and schedules an unban for the nearest date.
+ */
 function scheduleUnban(){
     connection.query("SELECT * FROM bans WHERE duration > NOW() AND active = 1 ORDER BY duration LIMIT 1", [], (err, results, fields) => {
         if(err) console.error("Something went wrong while scheduling unban =>\n"+err);
@@ -919,6 +1031,9 @@ function scheduleUnban(){
         }
     });
 }
+/**
+ * In case of a longer bot restart or crash it checks for missed unbans and unmutes and handles them accordingly
+ */
 function checkMissed(){
     // In case a bot crashes when it was supposed to unmute/unban it will miss it's cycle. Therefore we need some way of dealing with these cases.
     connection.query("SELECT * FROM mutes WHERE active = 1 AND duration != ?", [new Date(0)], (err, results, fields) => {
@@ -946,6 +1061,10 @@ function checkMissed(){
         }
     });
 }
+/**
+ * Loads sticky messages from the database, if the message id's do not match it tries to find them in channels.
+ * When messages are found it replaces the current messages and posts new ones so it can keep track of each new id.
+ */
 function loadSticky(){
     sticky.clear();
     connection.query("SELECT cid, mid FROM sticky", [], (err, results, fields) => {
@@ -1009,6 +1128,9 @@ function loadSticky(){
         }
     });
 }
+/**
+ * Loads roles and their permissions from the database into a local Map
+ */
 function loadRoles(){
     roles.clear();
     connection.query("SELECT rid, kick, ban, warn, mute, sticky, admin FROM permissions", [], (err, results, fields) => {
@@ -1021,6 +1143,9 @@ function loadRoles(){
       }
   });
 }
+/**
+ * Loads 'special'(assignment roles such as muted role) roles from the database into a local Map
+ */
 function loadSpecialRoles(){
     specialRoles.clear();
     connection.query("SELECT type, rid FROM roles", [], (err, results, fields) => {
@@ -1033,6 +1158,9 @@ function loadSpecialRoles(){
         }
     });
 }
+/**
+ * Loads keywords which will be used as an auto-response from the database into a local Map
+ */
 function loadKeywords(){
 	keywords.clear();
 	connection.query("SELECT keyword, response FROM keywords", [], (err, results, fields) => {
@@ -1065,18 +1193,6 @@ client.on('ready', () => {
   startStatus();
 
 });
-// Create an event listener for messages
-
-// Blocked channels mean that a process of replacing a sticky message in that particular channel is going on
-// Only when a channel is not blocked by a previous process can we proceed in replacing the sticky message
-// This way we can eliminate the risk of duplication and mistakes when many async processes arrive.
-
-// Spam protection
-    // If a user sends more than 3 messages within 2 seconds we will do an automatic mute of 15 minutes
-    // Insert the time of the message into the map check if times are in a 3 second difference
-        // If they are - mute
-        // If they are not - removes one that are more than 3s apart
-
 client.on('message', message => {
 	
 	antiSpam(message);
@@ -1368,15 +1484,19 @@ client.on('message', message => {
                             } else sendMessage(message, errorMessage("Cannot ban. You need more priviledges to ban this user."), false);
 						} else {
 							if(del == 7){
+								if(!isNaN(instruction[2])){
 									ban(message, until, string, del, instruction[2], null);
 									message.delete();
+								} else sendMessage(message, errorMessage("User left, please use only user id to ban."), false);
 							} else {
+								if(!isNaN(instruction[1])){
 									ban(message, until, string, del, instruction[1], null);
 									message.delete();
+								} else sendMessage(message, errorMessage("User left, please use only user id to ban."), false);
 							}
 						}
 						
-					})
+					});
                 }
             }).catch((e) => {sendMessage(message, errorMessage("You do not have enough permissions to use `"+env.prefix+"ban`"), false); console.log(e)});
         } else if(instruction[0] == "unban"){
@@ -1611,6 +1731,13 @@ client.on('message', message => {
 					sendMessage(message, embed, false);
 				});
 			}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)});
+		} else if(instruction[0] == "slowmode"){
+			checkPermissions(message.member, "mute").then(() => {		
+				if(!isNaN(instruction[1])){
+					let time = parseInt(instruction[1]);
+					message.channel.setRateLimitPerUser(time).catch((e) => {console.error(e)});
+				} else message.channel.setRateLimitPerUser(0).catch((e) => {console.error(e)});
+			}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)})
 		}
     } else if(keywords.has(message.content)){
 		sendMessage(message, keywordMessage(keywords.get(message.content)), false);
