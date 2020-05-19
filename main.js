@@ -45,6 +45,234 @@ let sevenPM = new Date();
 let nextRestart, lastRestart;
 
 /**
+ * Removes steamid-user records from the database
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {Discord.GuildMember | string} member - Member or steamid to remove
+ */
+function removeSteam(message, member){
+    if(member instanceof Discord.GuildMember){
+        connection.query("DELETE FROM steamid WHERE mid = ?", [member.id], (err, results, fields) => {
+            if(err) throw err;
+
+            if(results.affectedRows > 0){
+                sendMessage(message, successMessage("Successfully removed steamID."), false);
+            } else sendMessage(message, errorMessage("Something went wrong while deleting steamID. Maybe it doesn't exist?"), false);
+        })
+    } else {
+        connection.query("DELETE FROM steamid WHERE steamid = ?", [member], (err, results, fields) => {
+            if(err) throw err;
+
+            if(results.affectedRows > 0){
+                sendMessage(message, successMessage("Successfully removed steamID."), false);
+            } else sendMessage(message, errorMessage("Something went wrong while deleting steamID. Maybe it doesn't exist?"), false);
+        })
+    }
+}
+/**
+ * Views record data based on user or steam
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {Discord.GuildMember | string} member - Member or steamid to view
+ */
+function viewSteam(message, member){
+	if(member instanceof Discord.GuildMember){
+		connection.query("SELECT * FROM steamid WHERE mid = ?", [member.id], (err, results, fields) => {
+			if(err) throw err;
+
+			if(results.length > 0){
+				const embed = new Discord.MessageEmbed()
+				.setDescription(`SteamID for member: <@${member.id}>\n${results[0].steamid}`)
+				.setTimestamp(new Date())
+				.setFooter(`Added by ${results[0].addedby}`, "https://cdn3.iconfinder.com/data/icons/popular-services-brands-vol-2/512/steam-512.png");
+
+				sendMessage(message, embed, false);
+			} else sendMessage(message, errorMessage("No records found."), false);
+		});
+	} else {
+		connection.query("SELECT * FROM steamid WHERE steamid = ?", [member], (err, results, fields) => {
+			if(err) throw err;
+
+			if(results.length > 0){
+				const embed = new Discord.MessageEmbed()
+				.setDescription(`SteamID for member: <@${member.id}>\n${results[0].steamid}`)
+				.setTimestamp(new Date())
+				.setFooter(`Added by ${results[0].addedby}`, "https://cdn3.iconfinder.com/data/icons/popular-services-brands-vol-2/512/steam-512.png");
+
+				sendMessage(message, embed, false);
+			} else sendMessage(message, errorMessage("No records found."), false);
+		});
+	}
+}
+/**
+ * Adds a steamid record to the database
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {Discord.GuildMember} member - Member that this data will be added for
+ * @param {string} steamid - Steam id of this member
+ */
+function addSteam(message, member, steamid){
+    if(steamid.length > 0){
+        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
+            if(err) throw err;
+
+            if(results.affectedRows > 0){
+                sendMessage(message, successMessage("Successfully added steamID to user."), false);
+            } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+        });
+    } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+}
+/**
+ * Creates a request and sends it to the appropriate channel
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {string} request - Request data 
+ * @param {Discord.GuildMember} member - Member that sent this request 
+ */
+function createDonorRequest(message, request, member){
+    connection.query("INSERT INTO requests VALUES(null, ?, ?, default, null, default, null)", [member.id, request], (err, results, fields) => {
+        if(err) throw err;
+
+        if(results.affectedRows > 0){
+            connection.query("SELECT id FROM requests WHERE mid = ? ORDER BY date DESC LIMIT 1", [member.id], (e, r, f) => {
+                if(e) throw e;
+                if(r.length > 0){
+                    let req = JSON.parse(request);
+                    let embed = new Discord.MessageEmbed()
+                    .setTitle(`Donor request #${r[0].id} from ${member.user.username}`)
+                    .setDescription(`**Content**:\n${req.content}`)
+                    .setTimestamp(new Date())
+                    .setFooter("Sent: ")
+                    .setColor(0xff8307);
+
+                    let channel = message.guild.channels.cache.get("711999251797770295");
+
+					channel.send({reply:member.id}).then(() => {
+						channel.send(embed);
+					});
+					message.delete();
+                } else sendMessage(member, errorMessage("Something went wrong while sending the request. Try again?"), false);
+            });
+            sendMessage(message, successMessage("Request successfully sent.\nPlease be patient as the request needs some time to be reviewed."), false, null, null, 10000);
+
+
+        } else sendMessage(message, errorMessage("Something went wrong while sending the request. Try again?"), false);
+    });
+}
+/**
+ * Approves a request, updates the database and notifies the request applicant
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {number} id - Id of the request to approve
+ * @param {string} reason - Reason for approving the request or a message to send
+ */
+function approveDonorRequest(message, id, reason){
+	if(reason == null)
+		reason = "Approved."
+    connection.query("UPDATE requests SET status = 2, reason = ?, handledBy = ? WHERE id = ?", [reason, message.author.id, id], (err, results, fields) => {
+        if(err) throw err;
+
+        if(results.affectedRows > 0){
+            connection.query("SELECT mid FROM requests WHERE id = ?", [id], (e, r, f) => {
+                if(e) throw e;
+
+                if(r.length > 0){
+                    let embed = new Discord.MessageEmbed()
+                    .setTitle(`Donor request #${id}`)
+					.setDescription(reason)
+                    .addField("Approved by", message.author.tag)
+                    .setTimestamp(new Date())
+                    .setColor(0x28a745);
+        
+                    let channel = message.guild.channels.cache.get("711999192301830184");
+        
+                    channel.send({reply:r[0].mid});
+					channel.send(embed);
+                } else sendMessage(message, errorMessage("Something went wrong while approving request. Try again?"), false);
+            })
+        } else sendMessage(message, errorMessage("Something went wrong while approving request. Try again?"), false);
+    });
+}
+/**
+ * Denies a donor request, updates the database and notifies the user
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {number} id - The id of the request to deny
+ * @param {string} reason - Reason for denying the request
+ */
+function denyDonorRequest(message, id, reason){
+    connection.query("UPDATE requests SET status = 1, reason = ?, handledBy = ? WHERE id = ?", [reason, message.author.id, id], (err, results, fields) => {
+        if(err) throw err;
+
+        if(results.affectedRows > 0){
+            connection.query("SELECT mid FROM requests WHERE id = ?", [id], (e, r, f) => {
+                if(e) throw e;
+
+                if(r.length > 0){
+                    let embed = new Discord.MessageEmbed()
+                    .setTitle(`Donor request #${id} denied.`)
+                    .addField("Denied by", message.author.tag)
+                    .setDescription(reason)
+                    .setTimestamp(new Date())
+                    .setColor(0xdc3545);
+        
+                    let channel = message.guild.channels.cache.get("711999192301830184");
+        
+                    channel.send({reply:r[0].mid});
+					channel.send(embed);
+                } else sendMessage(message, errorMessage("Something went wrong while denying request. Try again?"), false);
+            })
+        } else sendMessage(message, errorMessage("Something went wrong while denying request. Try again?"), false);
+    });
+}
+/**
+ * Adds a note and guild member to the note database
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {string} note - Note to be added
+ * @param {Discord.GuildMember} member - Member to which the note will be added
+ */
+function createNote(message, note, member){
+    connection.query("INSERT INTO notes VALUES(null, ?, ?, default, ?)", [member.id, note, message.author.id], (err, results, fields) => {
+        if(err) throw err;
+
+        if(results.affectedRows > 0){
+            sendMessage(message, successMessage(`Successfully added note to user ${member.user.tag}.`), false);
+        } else sendMessage(message, errorMessage("Something went wrong while creating note."), false);
+    });
+
+}
+/**
+ * Removes a note from the database based on the note id
+ * @param {Discord.Message} message - Instruction message that was sent
+ * @param {number} id - Id of the note to be removed
+ */
+function removeNote(message, id){
+    connection.query("DELETE FROM notes WHERE id = ?", [id], (err, results, fields) => {
+        if(err) throw err;
+
+        if(results.affectedRows > 0){
+            sendMessage(message, successMessage("Successfully removed note."), false);
+        } else sendMessage(message, errorMessage("Something went wrong while removing note."), false);
+    });
+}
+/**
+ * Displays notes of a member if they exist
+ * @param {Discord.Message} message - Instruction message that was sent 
+ * @param {*} member - Member whos notes should be viewed
+ */
+function viewNotes(message, member){
+    connection.query("SELECT * FROM notes WHERE mid = ?", [member.id], (err, results, fields) => {
+        if(err) throw err;
+
+        if(results.length > 0){
+            let embed = new Discord.MessageEmbed()
+            .setTitle(`Notes for user ${member.user.username}`)
+            .setColor(0xff8307);
+            for(let i = 0; i < results.length; i++){
+                embed.addField(`[#${results[i].id}] - Note by ${results[i].by}`, `${results[i].note}\n*${moment(results[i].date).format("dddd, MMMM Do YYYY, h:mm:ss a")}*`);
+
+                if(i == results.length - 1){
+                    sendMessage(message, embed, false);
+                }
+            }
+        } else sendMessage(message, errorMessage("Could not find any notes for this member"), false);
+    });
+}
+/**
  * Resolves a Discord.GuildMember or Discord.User from a given message.
  * @param {Discord.Message} message - The message from which a member or user will be resolved.
  * @param {string|number} expectedPosition - At which word the mention of a user is expected
@@ -91,7 +319,7 @@ function resolveMember(message, expectedPosition){
 
                     let collector = new Discord.MessageCollector(message.channel, (m) => {
                         if(m.author.id == message.author.id){
-                            if(!isNaN(m.content) && m.content > 0 && m.content < members.size){
+                            if(!isNaN(m.content) && m.content > 0 && m.content <= members.size){
                                 let i = 0;
                                 let nr = parseInt(m.content);
                                 members.some((member) => {
@@ -302,6 +530,9 @@ function setWelcome(message){
         } else sendMessage(message, errorMessage("Something went wrong while setting a welcome message. Try again?"), false);
     });
 }
+/**
+ * @author Traktoorn, modified by gee
+ */
 function startStatus(){
     
                     var guild = client.guilds.cache.get("642408796580347927");
@@ -374,7 +605,7 @@ function startStatus(){
                                 r = "GMT+1 : **1am** | 7am | 1pm | 7pm\nEST : 2am | 8am | 2pm | **8pm**";
                                 nextRestart = oneAM;
                             }
-                            client.user.setActivity(`${client.users.cache.size} PhoenixRP members!`, { type: 'WATCHING' });
+                            client.user.setActivity(`${guild.memberCount} PhoenixRP members!`, { type: 'WATCHING' });
                             var ja = request('https://servers-live.fivem.net/api/servers/single/kqevrr', { json: true }, async (err, res, body) => {
                                 if (body != null && body != undefined && body.Data != null && body.Data != undefined) {
                                     var hostname = body['Data']['hostname'];
@@ -914,14 +1145,27 @@ function deletedMessage(message){
  * @param {boolean} private - If a message should be a DM or not
  * @param {boolean} log - Indicates if this message is a log message, sent to the specific log channel.
  * @param {string} type - Type of the log message
+ * @param {number} ttd - Time to delete. If set it will automatically delete the message once this time had passed. In milliseconds.
  */
-function sendMessage(to, content, private, log, type){ //If we want to send a private message, we pass user, otherwise pass message
+function sendMessage(to, content, private, log, type, ttd){ //If we want to send a private message, we pass user, otherwise pass message
     if(private){
-        to.send(content).catch((e) => {console.error("Error while sending private message =>\n"+e)});
+        to.send(content).then((m) => {
+			if(ttd != null){
+				setTimeout(() => {
+					m.delete();
+				}, ttd);
+			}
+		}).catch((e) => {console.error("Error while sending private message =>\n"+e)});
     } else {
-        to.channel.send(content).catch((e) => {console.error("Error while sending public message =>\n"+e)});;
+        to.channel.send(content).then((m) => {
+			if(ttd != null){
+				setTimeout(() => {
+					m.delete();
+				}, ttd);
+			}
+		}).catch((e) => {console.error("Error while sending public message =>\n"+e)});;
     }
-    if(log != null && log != undefined && log == true){
+    if(log != null && log == true){
         if(defaultChannel != null){
 	    defaultChannel.send(logMessage(to, content, type)).catch((e) => {console.error("Error while sending message.")});
 	}
@@ -1222,30 +1466,26 @@ client.on('message', message => {
         } else blockedSticky.delete(message.channel.id);
     }
 
-    // Status channel
-    if(message.channel.id == "642411949908557826"){
-        if(message.embeds.length == 1){
-            if(message.embeds[0].description != null && message.embeds[0].description != undefined){
-                if(message.embeds[0].description == "Server restarted successfully. You are now able to reconnect."){
-                    setTimeout(()=>{ //We've detected that there is a restart completed, wait 15 minutes and then remove the messages.
-                    client.channels.fetch("642411949908557826").then((c) => {
-                        c.messages.fetch({limit:100}).then((ms) => {
-                            if(ms instanceof Discord.Collection){
-                                ms.each((m) => {
-                                    if(m.author != null && m.author != undefined && m.author.bot == true && m.author.id != "695719904095240203"){
-                                        m.delete();
-                                    }
-                                });
-                            } else if(m.author != null && m.author != undefined && m.author.bot == true && m.author.id != "695719904095240203"){
-                                m.delete();
-                            }
-                        });
-                    })
-                    }, 900000);
-                }
-            }
-        }
-    }
+    // Status channel auto remove messages
+    if(message != null && message.channel != null && message.channel.id == "642411949908557826"){
+		if(message.webhookID != null && message.author.bot){
+			if(message.mentions != null && message.mentions.roles != null && message.mentions.roles.first() != null && message.mentions.roles.first().id == "673149980747366431"){
+				setTimeout(() => {
+					message.channel.messages.fetch({limit:100}).then((msg) => {
+						if(msg instanceof Discord.Collection){
+							msg.each((m) => {
+								if(m.webhookID != null){
+									m.delete();
+								}
+							})
+						} else if(m.webhookID != null){
+							msg.delete();
+						}
+					})
+				}, 300000);
+			}
+		}
+	}
     
     if(message.content[0] == env.prefix){ //If our message starts with a prefix
         let instruction = message.content.substr(1); //Then let's remove the prefix and store it in instruction variable
@@ -1723,7 +1963,8 @@ client.on('message', message => {
 					.setThumbnail("https://cdn0.iconfinder.com/data/icons/streamline-emoji-1/48/093-robot-face-2-512.png")
 					.setFooter("PhoenixRP Bot", "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256")
 					.setColor(0xff8307)
-					.setTimestamp(new Date())
+                    .setTimestamp(new Date())
+                    .addField("**STATUS:**", "Online")
 					.addField("**CPU USAGE:**", results[0].monit.cpu+"%")
 					.addField("**MEMORY USAGE**:", (results[0].monit.memory/1000000).toFixed(2)+"MB")
 					.addField("**UPTIME**:", moment().diff(new Date(results[0].pm2_env.pm_uptime), "hours", true).toFixed(2)+"hours");
@@ -1738,6 +1979,98 @@ client.on('message', message => {
 					message.channel.setRateLimitPerUser(time).catch((e) => {console.error(e)});
 				} else message.channel.setRateLimitPerUser(0).catch((e) => {console.error(e)});
 			}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)})
+		}else if(instruction[0] == "note"){
+            if(instruction[1] == "create" || instruction[1] == "add"){
+                checkPermissions(message.member, "mute").then(() => {
+                    resolveMember(message, 2).then((member) => {
+                        if(member != null){
+                            createNote(message, message.content.split(instruction[2]+" ")[1], member);
+                        } else sendMessage(message, errorMessage("Could not find this member."), false);
+                    }).catch((e) => console.error(e));
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)})
+            } else if(instruction[1] == "remove" || instruction[1] == "delete"){
+                checkPermissions(message.member, "admin").then(() => {
+                    if(!isNaN(instruction[2])){
+                        removeNote(message, instruction[2]);
+                    } else sendMessage(message, errorMessage("Your ID is not a valid number."), false);
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)})
+            } else if(instruction[1] == "view"){
+                checkPermissions(message.member, "mute").then(() => {
+                    resolveMember(message, 2).then((member) => {
+                        if(member != null){
+                            viewNotes(message, member);
+                        } else sendMessage(message, errorMessage("Could not find this member."), false);
+                    });
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)})
+            }
+        } else if(instruction[0] == "request"){
+            if(instruction[1] == "approve"){
+                checkPermissions(message.member, "admin").then((value) => {
+                    if(value != null){
+                        if(!isNaN(instruction[2])){
+							if(instruction[3] != null && instruction[3].length > 0){
+								approveDonorRequest(message, parseInt(instruction[2]), message.content.split(instruction[2]+" ")[1]);
+							} else approveDonorRequest(message, parseInt(instruction[2]));
+                            
+                        } else sendMessage(message, errorMessage("You need to input a valid number as the id."), false);
+                    } else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
+            } else if(instruction[1] == "deny"){
+                checkPermissions(message.member, "admin").then((value) => {
+                    if(value != null){
+                        if(!isNaN(instruction[2])){
+                            if(instruction[3] != null && instruction[3].length > 0){
+                                denyDonorRequest(message, parseInt(instruction[2]), message.content.split(instruction[2]+" ")[1]);
+                            } else denyDonorRequest(message, instruction[2], "No reason given.");
+                        } else sendMessage(message, errorMessage("You need to input a valid number as the id."), false);
+                    } else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
+            } else if(instruction[1] != null && instruction[1].length > 0){
+				let attachments = "";
+				if(message.attachments != null && message.attachments.size > 0){
+					message.attachments.each((a) => {
+						attachments += a.url;
+					})
+				}
+                createDonorRequest(message, JSON.stringify({content: message.content.split(instruction[0]+" ")[1]+"\n"+attachments}), message.member);
+            }
+        } else if(instruction[0] == "addsteam"){
+			checkPermissions(message.member, "admin").then((value) => {
+				if(value != null){
+					resolveMember(message, 2).then((member) => {
+						if(member != null){
+                            addSteam(message, member, instruction[1]);
+                        } else sendMessage(message, errorMessage("Could not find this member."), false);
+					})
+				} else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+			}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);});
+		} else if(instruction[0] == "steam"){
+			if(instruction[1] == "remove"){
+				checkPermissions(message.member, "admin").then((value) => {
+					if(value != null){
+						resolveMember(message, 1).then((member) => {
+							if(member != null){
+								removeSteam(message, member);
+							} if(member == null){
+								removeSteam(message, instruction[2]);
+							}
+						})
+					} else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+				}).catch(() =>{sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
+			} else {
+				checkPermissions(message.member, "admin").then((value) => {
+					if(value != null){
+						resolveMember(message, 1).then((member) => {
+							if(member != null){
+								viewSteam(message, member);
+							} if(member == null){
+								viewSteam(message, instruction[1]);
+							}
+						})
+					} else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+				}).catch(() =>{sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
+			}
+			
 		}
     } else if(keywords.has(message.content)){
 		sendMessage(message, keywordMessage(keywords.get(message.content)), false);
@@ -1782,4 +2115,3 @@ const embed = new Discord.MessageEmbed()
 });
 
 client.login(env.token);
-
