@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `bans` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=62 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=67 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS `mutes` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=183 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=209 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS `notes` (
   `date` datetime DEFAULT current_timestamp(),
   `by` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -132,9 +132,10 @@ CREATE TABLE IF NOT EXISTS `requests` (
   `status` int(1) DEFAULT 0,
   `reason` varchar(2048) DEFAULT NULL,
   `date` datetime DEFAULT current_timestamp(),
+  `message` varchar(64) DEFAULT NULL,
   `handledBy` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=52 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -156,11 +157,12 @@ CREATE TABLE IF NOT EXISTS `steamid` (
   `steamid` varchar(32) DEFAULT NULL,
   `mid` varchar(50) DEFAULT NULL,
   `date` datetime DEFAULT current_timestamp(),
+  `whitelist` tinyint(1) DEFAULT 0,
   `addedby` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `steamid` (`steamid`),
   UNIQUE KEY `mid` (`mid`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=86 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -174,7 +176,7 @@ CREATE TABLE IF NOT EXISTS `sticky` (
   `created_by` varchar(64) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `cid` (`cid`)
-) ENGINE=InnoDB AUTO_INCREMENT=158 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=170 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -186,7 +188,7 @@ CREATE TABLE IF NOT EXISTS `warns` (
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 

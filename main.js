@@ -31,6 +31,7 @@ let spamIgnoreChannels = new Map();
 let defaultChannel;
 let messageLogChannel = null;
 
+let whitelistChannel = null;
 var uptime = "00h 00m";
 
 // Server status monitor vars
@@ -43,12 +44,31 @@ let onePM = new Date();
 let sevenPM = new Date();
 
 let nextRestart, lastRestart;
+function denyWhitelist(message, member, steamid){
+	if(steamid.length > 0){
+        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, default, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?, whitelist = 0", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
+            if(err) throw err;
 
-/**
- * Removes steamid-user records from the database
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {Discord.GuildMember | string} member - Member or steamid to remove
- */
+            if(results.affectedRows > 0){
+                whitelistChannel.send(`Your whitelist has been **denied** by ${message.author.username} - ${steamid}`, {reply:member.id});
+				message.delete();
+            } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+        });
+    } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+}
+function whitelist(message, member, steamid){
+	if(steamid.length > 0){
+        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, 1, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
+            if(err) throw err;
+
+            if(results.affectedRows > 0){
+                whitelistChannel.send(`Your whitelist has been **approved** by ${message.author.username} - ${steamid}`, {reply:member.id});
+				member.roles.add("714214262188277890");
+				message.delete();
+            } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+        });
+    } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+}
 function removeSteam(message, member){
     if(member instanceof Discord.GuildMember){
         connection.query("DELETE FROM steamid WHERE mid = ?", [member.id], (err, results, fields) => {
@@ -68,11 +88,6 @@ function removeSteam(message, member){
         })
     }
 }
-/**
- * Views record data based on user or steam
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {Discord.GuildMember | string} member - Member or steamid to view
- */
 function viewSteam(message, member){
 	if(member instanceof Discord.GuildMember){
 		connection.query("SELECT * FROM steamid WHERE mid = ?", [member.id], (err, results, fields) => {
@@ -80,10 +95,15 @@ function viewSteam(message, member){
 
 			if(results.length > 0){
 				const embed = new Discord.MessageEmbed()
-				.setDescription(`SteamID for member: <@${member.id}>\n${results[0].steamid}`)
+				.setDescription(`**SteamID for member**: <@${member.id}>\n${results[0].steamid}`)
 				.setTimestamp(new Date())
 				.setFooter(`Added by ${results[0].addedby}`, "https://cdn3.iconfinder.com/data/icons/popular-services-brands-vol-2/512/steam-512.png");
 
+				if(results[0].whitelist == 1){
+					embed.addField("Whitelisted", "True");
+				} else {
+					embed.addField("Whitelisted", "False");
+				}
 				sendMessage(message, embed, false);
 			} else sendMessage(message, errorMessage("No records found."), false);
 		});
@@ -93,24 +113,22 @@ function viewSteam(message, member){
 
 			if(results.length > 0){
 				const embed = new Discord.MessageEmbed()
-				.setDescription(`SteamID for member: <@${member.id}>\n${results[0].steamid}`)
+				.setDescription(`**SteamID for member**: <@${member.id}>\n${results[0].steamid}`)
 				.setTimestamp(new Date())
 				.setFooter(`Added by ${results[0].addedby}`, "https://cdn3.iconfinder.com/data/icons/popular-services-brands-vol-2/512/steam-512.png");
-
+				if(results[0].whitelist == 1){
+					embed.addField("Whitelisted", "True");
+				} else {
+					embed.addField("Whitelisted", "False");
+				}
 				sendMessage(message, embed, false);
 			} else sendMessage(message, errorMessage("No records found."), false);
 		});
 	}
 }
-/**
- * Adds a steamid record to the database
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {Discord.GuildMember} member - Member that this data will be added for
- * @param {string} steamid - Steam id of this member
- */
 function addSteam(message, member, steamid){
     if(steamid.length > 0){
-        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
+        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, default, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
             if(err) throw err;
 
             if(results.affectedRows > 0){
@@ -119,14 +137,8 @@ function addSteam(message, member, steamid){
         });
     } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
 }
-/**
- * Creates a request and sends it to the appropriate channel
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {string} request - Request data 
- * @param {Discord.GuildMember} member - Member that sent this request 
- */
 function createDonorRequest(message, request, member){
-    connection.query("INSERT INTO requests VALUES(null, ?, ?, default, null, default, null)", [member.id, request], (err, results, fields) => {
+    connection.query("INSERT INTO requests VALUES(null, ?, ?, default, null, default, null, null)", [member.id, request], (err, results, fields) => {
         if(err) throw err;
 
         if(results.affectedRows > 0){
@@ -135,17 +147,20 @@ function createDonorRequest(message, request, member){
                 if(r.length > 0){
                     let req = JSON.parse(request);
                     let embed = new Discord.MessageEmbed()
-                    .setTitle(`Donor request #${r[0].id} from ${member.user.username}`)
-                    .setDescription(`**Content**:\n${req.content}`)
+                    .setTitle(`Donator request #${r[0].id}`)
+                    .setDescription(`**Request by:**<@${member.id}>\n**Content**:\n${req.content}`)
                     .setTimestamp(new Date())
                     .setFooter("Sent: ")
                     .setColor(0xff8307);
 
                     let channel = message.guild.channels.cache.get("711999251797770295");
 
-					channel.send({reply:member.id}).then(() => {
-						channel.send(embed);
-					});
+						channel.send(embed).then((m) => {
+							connection.query("UPDATE requests SET message = ? WHERE id = ?", [m.id, r[0].id], (er, res, fie) => {
+								if(er) throw er;
+							})
+						});
+						
 					message.delete();
                 } else sendMessage(member, errorMessage("Something went wrong while sending the request. Try again?"), false);
             });
@@ -155,12 +170,6 @@ function createDonorRequest(message, request, member){
         } else sendMessage(message, errorMessage("Something went wrong while sending the request. Try again?"), false);
     });
 }
-/**
- * Approves a request, updates the database and notifies the request applicant
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {number} id - Id of the request to approve
- * @param {string} reason - Reason for approving the request or a message to send
- */
 function approveDonorRequest(message, id, reason){
 	if(reason == null)
 		reason = "Approved."
@@ -168,63 +177,57 @@ function approveDonorRequest(message, id, reason){
         if(err) throw err;
 
         if(results.affectedRows > 0){
-            connection.query("SELECT mid FROM requests WHERE id = ?", [id], (e, r, f) => {
+            connection.query("SELECT mid, message FROM requests WHERE id = ?", [id], (e, r, f) => {
                 if(e) throw e;
 
                 if(r.length > 0){
                     let embed = new Discord.MessageEmbed()
-                    .setTitle(`Donor request #${id}`)
+                    .setTitle(`Donator request #${id}`)
 					.setDescription(reason)
                     .addField("Approved by", message.author.tag)
                     .setTimestamp(new Date())
                     .setColor(0x28a745);
         
                     let channel = message.guild.channels.cache.get("711999192301830184");
+					let channel2 = message.guild.channels.cache.get("711999251797770295");
         
                     channel.send({reply:r[0].mid});
 					channel.send(embed);
+					message.delete();
+					channel2.messages.delete(r[0].message);
                 } else sendMessage(message, errorMessage("Something went wrong while approving request. Try again?"), false);
             })
         } else sendMessage(message, errorMessage("Something went wrong while approving request. Try again?"), false);
     });
 }
-/**
- * Denies a donor request, updates the database and notifies the user
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {number} id - The id of the request to deny
- * @param {string} reason - Reason for denying the request
- */
 function denyDonorRequest(message, id, reason){
     connection.query("UPDATE requests SET status = 1, reason = ?, handledBy = ? WHERE id = ?", [reason, message.author.id, id], (err, results, fields) => {
         if(err) throw err;
 
         if(results.affectedRows > 0){
-            connection.query("SELECT mid FROM requests WHERE id = ?", [id], (e, r, f) => {
+            connection.query("SELECT mid, message FROM requests WHERE id = ?", [id], (e, r, f) => {
                 if(e) throw e;
 
                 if(r.length > 0){
                     let embed = new Discord.MessageEmbed()
-                    .setTitle(`Donor request #${id} denied.`)
+                    .setTitle(`Donator request #${id} denied.`)
                     .addField("Denied by", message.author.tag)
                     .setDescription(reason)
                     .setTimestamp(new Date())
                     .setColor(0xdc3545);
         
                     let channel = message.guild.channels.cache.get("711999192301830184");
+					let channel2 = message.guild.channels.cache.get("711999251797770295");
         
                     channel.send({reply:r[0].mid});
 					channel.send(embed);
+					message.delete();
+					channel2.messages.delete(r[0].message);
                 } else sendMessage(message, errorMessage("Something went wrong while denying request. Try again?"), false);
             })
         } else sendMessage(message, errorMessage("Something went wrong while denying request. Try again?"), false);
     });
 }
-/**
- * Adds a note and guild member to the note database
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {string} note - Note to be added
- * @param {Discord.GuildMember} member - Member to which the note will be added
- */
 function createNote(message, note, member){
     connection.query("INSERT INTO notes VALUES(null, ?, ?, default, ?)", [member.id, note, message.author.id], (err, results, fields) => {
         if(err) throw err;
@@ -235,11 +238,6 @@ function createNote(message, note, member){
     });
 
 }
-/**
- * Removes a note from the database based on the note id
- * @param {Discord.Message} message - Instruction message that was sent
- * @param {number} id - Id of the note to be removed
- */
 function removeNote(message, id){
     connection.query("DELETE FROM notes WHERE id = ?", [id], (err, results, fields) => {
         if(err) throw err;
@@ -249,11 +247,6 @@ function removeNote(message, id){
         } else sendMessage(message, errorMessage("Something went wrong while removing note."), false);
     });
 }
-/**
- * Displays notes of a member if they exist
- * @param {Discord.Message} message - Instruction message that was sent 
- * @param {*} member - Member whos notes should be viewed
- */
 function viewNotes(message, member){
     connection.query("SELECT * FROM notes WHERE mid = ?", [member.id], (err, results, fields) => {
         if(err) throw err;
@@ -465,6 +458,15 @@ function antiSpam(message){
 							spamList.delete(key);
 						}
 					});
+					
+					if(message.mentions.users.size > 0 && (message.channel.id == "642413498437206016" || message.channel.id == "699621179249524747")){
+						message.mentions.users.some((u) => {
+							if(u.id == "283424515160014857"){
+								mute(message, moment().add(15, 'minutes').toDate(), "You tried to tag Ramp, silly.", true);
+								return true;
+							}
+						});
+					}
 		});	
 	}
 }
@@ -722,8 +724,11 @@ function mute(message, until, reason, auto, m){
             member.roles.add(specialRoles.get("mute"));
 
             scheduleUnmute();
-
-            message.delete();
+			
+			if(auto == null){
+				message.delete();
+			}
+            
         }
     });
 }
@@ -1436,6 +1441,7 @@ client.on('ready', () => {
 
   startStatus();
 
+	whitelistChannel = client.guilds.cache.get("642408796580347927").channels.cache.get("714219058777555045");
 });
 client.on('message', message => {
 	
@@ -2004,28 +2010,7 @@ client.on('message', message => {
                 }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command!"), false)})
             }
         } else if(instruction[0] == "request"){
-            if(instruction[1] == "approve"){
-                checkPermissions(message.member, "admin").then((value) => {
-                    if(value != null){
-                        if(!isNaN(instruction[2])){
-							if(instruction[3] != null && instruction[3].length > 0){
-								approveDonorRequest(message, parseInt(instruction[2]), message.content.split(instruction[2]+" ")[1]);
-							} else approveDonorRequest(message, parseInt(instruction[2]));
-                            
-                        } else sendMessage(message, errorMessage("You need to input a valid number as the id."), false);
-                    } else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
-                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
-            } else if(instruction[1] == "deny"){
-                checkPermissions(message.member, "admin").then((value) => {
-                    if(value != null){
-                        if(!isNaN(instruction[2])){
-                            if(instruction[3] != null && instruction[3].length > 0){
-                                denyDonorRequest(message, parseInt(instruction[2]), message.content.split(instruction[2]+" ")[1]);
-                            } else denyDonorRequest(message, instruction[2], "No reason given.");
-                        } else sendMessage(message, errorMessage("You need to input a valid number as the id."), false);
-                    } else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
-                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
-            } else if(instruction[1] != null && instruction[1].length > 0){
+			if(instruction[1] != null && instruction[1].length > 0){
 				let attachments = "";
 				if(message.attachments != null && message.attachments.size > 0){
 					message.attachments.each((a) => {
@@ -2034,8 +2019,29 @@ client.on('message', message => {
 				}
                 createDonorRequest(message, JSON.stringify({content: message.content.split(instruction[0]+" ")[1]+"\n"+attachments}), message.member);
             }
-        } else if(instruction[0] == "addsteam"){
-			checkPermissions(message.member, "admin").then((value) => {
+        } else if(instruction[0] == "approve"){
+                checkPermissions(message.member, "admin").then((value) => {
+                    if(value != null){
+                        if(!isNaN(instruction[1])){
+							if(instruction[2] != null && instruction[2].length > 0){
+								approveDonorRequest(message, parseInt(instruction[1]), message.content.split(instruction[1]+" ")[1]);
+							} else approveDonorRequest(message, parseInt(instruction[1]));
+                            
+                        } else sendMessage(message, errorMessage("You need to input a valid number as the id."), false);
+                    } else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
+            } if(instruction[0] == "deny"){
+                checkPermissions(message.member, "admin").then((value) => {
+                    if(value != null){
+                        if(!isNaN(instruction[1])){
+                            if(instruction[2] != null && instruction[2].length > 0){
+                                denyDonorRequest(message, parseInt(instruction[1]), message.content.split(instruction[1]+" ")[1]);
+                            } else denyDonorRequest(message, instruction[1], "No reason given.");
+                        } else sendMessage(message, errorMessage("You need to input a valid number as the id."), false);
+                    } else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+                }).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
+            } else if(instruction[0] == "addsteam"){
+			checkPermissions(message.member, "mute").then((value) => {
 				if(value != null){
 					resolveMember(message, 2).then((member) => {
 						if(member != null){
@@ -2058,7 +2064,7 @@ client.on('message', message => {
 					} else sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
 				}).catch(() =>{sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
 			} else {
-				checkPermissions(message.member, "admin").then((value) => {
+				checkPermissions(message.member, "mute").then((value) => {
 					if(value != null){
 						resolveMember(message, 1).then((member) => {
 							if(member != null){
@@ -2071,6 +2077,26 @@ client.on('message', message => {
 				}).catch(() =>{sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);})
 			}
 			
+		} else if(instruction[0] == "whitelist"){
+			checkPermissions(message.member, "mute").then((value) => {
+				if(value != null){
+					resolveMember(message, 2).then((member) => {
+						if(member != null){
+							whitelist(message, member, instruction[1]);
+						} else sendMessage(message, errorMessage("Cannot find member."), false);
+					})
+				}
+			})
+		} else if(instruction[0] == "denywhitelist"){
+			checkPermissions(message.member, "mute").then((value) => {
+				if(value != null){
+					resolveMember(message, 2).then((member) => {
+						if(member != null){
+							denyWhitelist(message, member, instruction[1]);
+						} else sendMessage(message, errorMessage("Cannot find member."), false);
+					})
+				}
+			})
 		}
     } else if(keywords.has(message.content)){
 		sendMessage(message, keywordMessage(keywords.get(message.content)), false);
@@ -2115,3 +2141,4 @@ const embed = new Discord.MessageEmbed()
 });
 
 client.login(env.token);
+
