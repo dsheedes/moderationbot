@@ -23,6 +23,13 @@ let sticky = new Map();
 let keywords = new Map();
 let welcomeMessage = null;
 
+let massMessageCounter = 0;
+let massMessageErrorCounter = 0;
+
+let reactionRoles = new Map(); // Sorted by bodyID
+let reactions = new Map(); // Sorted by roleID
+let rrWatchlist = new Map(); // Sorted by message id - used to get data from reactionRoles on reactionadd
+
 let blockedSticky = new Map();
 let spamList = new Map();
 
@@ -32,6 +39,7 @@ let defaultChannel;
 let messageLogChannel = null;
 
 let whitelistChannel = null;
+let interviewChannel = null;
 var uptime = "00h 00m";
 
 // Server status monitor vars
@@ -44,25 +52,204 @@ let onePM = new Date();
 let sevenPM = new Date();
 
 let nextRestart, lastRestart;
-function denyWhitelist(message, member, steamid){
-	if(steamid.length > 0){
-        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, default, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?, whitelist = 0", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
+/**
+ * Deletes a reactionrole body from the database, cancels monitoring for that message.
+ * @param {Discord.Message} - Message containing the instruction
+ * @param {string} - ID number of the created body
+ */
+function rrDelete(message, bodyID){
+	connection.query("DELETE * FROM rr_body WHERE id = ?", [bodyID], (err, results, fields) => {
+		if(err){
+			sendMessage(message, errorMessage("Something happened while removing reaction role body."), false);
+			console.error(err);
+		}
+		
+		if(results.affectedRows > 0){
+            sendMessage(message, successMessage("Successfully removed reaction role body #"+bodyID), false);
+            rrWatchlist.delete(reactionRoles.get(String(bodyID).mid));
+			reactionRoles.delete(String(bodyID));
+		} else sendMessage(message, errorMessage("Could not remove this body. Are you sure it exists?"), false);
+	});
+}
+/**
+ * Creates a reactionrole message, posts it and updates the database
+ * @param {Discord.Message} message - Message containing the instruction
+ * @param {string} bodyID - ID number of the in-creation body
+ */
+function rrCreate(message, bodyID){
+	let rr = reactionRoles.get(String(bodyID));
+	
+	if(rr.status == 1){
+		sendMessage(message, errorMessage("You cannot have two instances of the same reaction role body.\nAlready in: <#"+rr.cid+">"), false);
+		return;
+	}
+	
+	if(rr != null){
+		let embed = new Discord.MessageEmbed()
+		.setTimestamp(new Date)
+		.setFooter("Phoenix RP Reaction Roles", "https://cdn.discordapp.com/app-icons/695719904095240203/52decf1ee25f52b003340ef78f31e511.png?size=256")
+		.setDescription(rr.body)
+		.setColor(0xff8307);
+		
+		message.channel.send(embed).then((m) => {
+			rrWatchlist.set(m, bodyID);
+			connection.query("UPDATE rr_body SET mid = ?, cid = ?, status = 1, date = default WHERE id = ?", [m.id, m.channel.id, bodyID], (err, results, fields) => {
+				if(err) throw err;
+			});
+			
+			for(let i = 0; i < rr.reactions.length; i++){
+				m.react(rr.reactions[i].reaction);
+			}
+		})
+	} else sendMessage(message, errorMessage("Cannot find that reaction role body."), false);
+}
+/**
+ * Adds a reaction-role link to a body
+ * Added reaction-role links appear in the order they've been added in
+ * @param {Discord.Message} message - Message containing the instruction
+ * @param {string} bodyID - ID number of the in-creation body
+ * @param {string} role - ID number of the role to be added
+ */
+function rrAdd(message, bodyID, role){
+	let rr = reactionRoles.get(String(bodyID).trim());
+	let reaction = reactions.get(String(role).trim());
+	
+	if(rr != null && reaction != null){
+		rr.reactions.push({"rid":role, "reaction":reaction});
+		reactionRoles.set(bodyID, rr);
+		
+		connection.query("UPDATE rr_body SET reactions = ? WHERE id = ?", [JSON.stringify(rr.reactions), bodyID], (err, results, fields) => {
+			if(err){
+				sendMessage(message, errorMessage("Something went wrong while adding reaction-roles to body."), false);
+				console.error(err);
+			}
+			
+			if(results.affectedRows > 0){
+				sendMessage(message, successMessage(`Successfully added link ${reaction} - <@&${role}> to body #${bodyID}`));
+			} else sendMessage(message, errorMessage("Something went wrong while adding reaction-roles to body."), false);
+		});
+	} else sendMessage(message, errorMessage("Cannot find BodyID / Role ID."), false);
+}
+/**
+ * Creates a textual content for the reaction message
+ * @param {Discord.Message} message - Message containing the instructions 
+ * @param {*} body - Contents of the in-creation message
+ */
+function rrBody(message, body){
+	connection.query("INSERT INTO rr_body VALUES (null, ?, null, null, 0, ?, default, default, ?)", [message.guild.id, body, message.author.id], (err, results, fields) => {
+		if(err) {
+			sendMessage(message, errorMessage("Something went wrong while creating reaction role body."), false);
+			console.error(err);
+		}
+		
+		if(results.affectedRows > 0){
+			connection.query("SELECT id FROM rr_body WHERE sid = ? AND status = 0 ORDER BY id DESC LIMIT 1", [message.guild.id], (e, r, f) => {
+				if(e){
+					sendMessage(message, errorMessage("Something went wrong while creating reaction role body."), false);
+					console.error(e);
+				}
+				
+				if(r.length > 0){
+					reactionRoles.set(String(r[0].id), {
+						body: body,
+						reactions: [],
+						mid: null,
+						status: 0,
+						sid: message.guild.id
+					});
+					sendMessage(message, successMessage(`Successfully created body #${r[0].id}\nYou can now use /rradd roleID to add previously created reaction-role links to the body.`), false);
+				} else sendMessage(message, errorMessage("Something went wrong while creating reaction role body."), false);
+			})
+		} else sendMessage(message, errorMessage("Something went wrong while creating reaction role body."), false);
+	});
+}
+/**
+ * Removes a reaction-role link, so a new emoji can be used for the role
+ * @param {Discord.Message} message - Message containing the instructions
+ * @param {string} roleID - ID number of the role
+ */
+function rrUnlink(message, roleID){
+	connection.query("DELETE FROM reactions WHERE roleid = ?", [roleID], (err, results, fields) => {
+		if(err) throw err;
+		if(results != null && results.affectedRows > 0){
+			sendMessage(message, successMessage(`Successfully unlinked reactions from <@&${roleID}>`), false);
+			reactions.delete(roleID);
+		} else sendMessage(message, errorMessage("Couldn't unlink. Are you sure it exists?"), false);
+	});
+}
+/**
+ * Creates a reaction-role link, binding an emoji and a role together
+ * @param {Discord.Message} message - Message containing the instruction
+ * @param {string} reaction - Emoji / reaction
+ * @param {string} roleID - ID number of the role 
+ */
+function rrLink(message, reaction, roleID){
+	connection.query("INSERT INTO reactions VALUES (null, ?, ?, ?, default, ?)", [message.guild.id, reaction, roleID, message.author.id], (err, results, fields) => {
+		if(err){
+			sendMessage(message, errorMessage("There was an error while linking a reaction to a role. Maybe it is already linked?"), false);
+			console.error(err);
+		}
+											
+		if(results != null && results.affectedRows > 0){
+			reactions.set(roleID, {reaction: reaction});
+			sendMessage(message, successMessage(`Successfully linked ${reaction} to role <@&${roleID}>`), false);
+		} else sendMessage(message, errorMessage("Couldn't link reaction to role."), false);
+	});
+}
+function massMessage(guild, content){
+	guild.members.cache.each((m) => {
+		m.send(content).then(() => {
+			massMessageCounter++;
+			console.log("Sent "+massMessageCounter+" messages.");
+		}).catch(() => {
+			massMessageErrorCounter++;
+			console.error("Failed "+massMessageErrorCounter);
+		});
+	})
+}
+function denyInterview(message, member, reason){
+		
+        connection.query("INSERT INTO steamid VALUES (null, null, ?, default, default, 0, ?, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, whitelist = 0, interview = 0, reason = ?", [member.id, reason, message.author.id, member.id, message.author.id, reason], (err, results, fields) => {
             if(err) throw err;
 
             if(results.affectedRows > 0){
-                whitelistChannel.send(`Your whitelist has been **denied** by ${message.author.username} - ${steamid}`, {reply:member.id});
+                interviewChannel.send(`Your application has been **denied** by ${message.author.username}\n**Reason**:\n${reason}`, {reply:member.id});
 				message.delete();
             } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
         });
-    } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+}
+function interview(message, member, steamid){
+		if(steamid.length > 0){
+			connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, 0, 1, null, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?", [steamid, member.id, message.author.id, member.id, message.author.id], (err, results, fields) => {
+				if(err) throw err;
+
+				if(results.affectedRows > 0){
+					interviewChannel.send(`Your application has been **approved** by ${message.author.username} - ${steamid}`, {reply:member.id});
+					member.roles.add("714214390265806919");
+					message.delete();
+				} else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+			});
+		} else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+}
+function denyWhitelist(message, member, reason){
+        connection.query("INSERT INTO steamid VALUES (null, null, ?, default, default, 0, ?, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, whitelist = 0, interview = 0, reason = ?", [member.id, reason, message.author.id, member.id, message.author.id, reason], (err, results, fields) => {
+            if(err) throw err;
+
+            if(results.affectedRows > 0){
+                whitelistChannel.send(`Your whitelist has been **denied** by ${message.author.username}\n**Reason**:\n${reason}`, {reply:member.id});
+				member.roles.remove("714214390265806919");
+				message.delete();
+            } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
+        });
 }
 function whitelist(message, member, steamid){
 	if(steamid.length > 0){
-        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, 1, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
+        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, 1, 1, null, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?, whitelist = 1", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
             if(err) throw err;
 
             if(results.affectedRows > 0){
                 whitelistChannel.send(`Your whitelist has been **approved** by ${message.author.username} - ${steamid}`, {reply:member.id});
+				member.roles.remove("714214390265806919");
 				member.roles.add("714214262188277890");
 				message.delete();
             } else sendMessage(message, errorMessage("Something went wrong while inserting steam id."), false);
@@ -104,6 +291,11 @@ function viewSteam(message, member){
 				} else {
 					embed.addField("Whitelisted", "False");
 				}
+				if(results[0].interview == 1){
+					embed.addField("Interview", "True");
+				} else {
+					embed.addField("Interview", "False");
+				}
 				sendMessage(message, embed, false);
 			} else sendMessage(message, errorMessage("No records found."), false);
 		});
@@ -128,7 +320,7 @@ function viewSteam(message, member){
 }
 function addSteam(message, member, steamid){
     if(steamid.length > 0){
-        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, default, ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
+        connection.query("INSERT INTO steamid VALUES (null, ?, ?, default, default, 0, null,  ?) ON DUPLICATE KEY UPDATE mid = ?, addedby = ?, steamid = ?", [steamid, member.id, message.author.id, member.id, message.author.id, steamid], (err, results, fields) => {
             if(err) throw err;
 
             if(results.affectedRows > 0){
@@ -173,6 +365,7 @@ function createDonorRequest(message, request, member){
 function approveDonorRequest(message, id, reason){
 	if(reason == null)
 		reason = "Approved."
+	else reason = reason.trim();
     connection.query("UPDATE requests SET status = 2, reason = ?, handledBy = ? WHERE id = ?", [reason, message.author.id, id], (err, results, fields) => {
         if(err) throw err;
 
@@ -1422,6 +1615,41 @@ function loadKeywords(){
 		}
 	});
 }
+function loadReactionRoles(){
+	connection.query("SELECT * FROM rr_body", [], (err, results, fields) => {
+		if(err) throw err;
+		
+		if(results.length > 0){
+			for(let i = 0; i < results.length; i++){
+				
+				reactionRoles.set(String(results[i].id), {
+						body: results[i].body,
+						reactions: JSON.parse(results[i].reactions),
+						mid: results[i].mid,
+						cid: results[i].cid,
+						status: results[i].status,
+						sid: results[i].sid
+				});
+				if(results[i].mid != null){
+					rrWatchlist.set(results[i].mid, String(results[i].id));
+					// Cache the message
+					client.guilds.cache.get(results[i].sid).channels.cache.get(results[i].cid).messages.fetch(results[i].mid);
+				}
+			}
+		}
+	});
+}
+function loadReactions(){
+	connection.query("SELECT * FROM reactions", [], (err, results, fields) => {
+		if(err) throw err;
+		
+		if(results.length > 0){
+			for(let i = 0; i < results.length; i++){
+				reactions.set(results[i].roleid, String(results[i].reaction));
+			}
+		}
+	});
+}
 client.on('ready', () => {
   console.log('I am ready!');
 
@@ -1442,6 +1670,11 @@ client.on('ready', () => {
   startStatus();
 
 	whitelistChannel = client.guilds.cache.get("642408796580347927").channels.cache.get("714219058777555045");
+	interviewChannel = client.guilds.cache.get("642408796580347927").channels.cache.get("714957485261455390");
+	
+  loadReactionRoles();
+  loadReactions();
+	
 });
 client.on('message', message => {
 	
@@ -2092,11 +2325,101 @@ client.on('message', message => {
 				if(value != null){
 					resolveMember(message, 2).then((member) => {
 						if(member != null){
-							denyWhitelist(message, member, instruction[1]);
+							let reason = message.content.split(instruction[1])[1];
+		
+							if(reason != null)
+								reason = reason.trim();
+							else reason = "No reason specified";
+							denyWhitelist(message, member, reason);
 						} else sendMessage(message, errorMessage("Cannot find member."), false);
 					})
 				}
 			})
+		} else if(instruction[0] == "interview"){
+			checkPermissions(message.member, "mute").then((value) => {
+				if(value != null){
+					resolveMember(message, 2).then((member) => {
+						if(member != null){
+							interview(message, member, instruction[1]);
+						} else sendMessage(message, errorMessage("Cannot find member."), false);
+					})
+				}
+			})
+		} else if(instruction[0] == "denyinterview"){
+			checkPermissions(message.member, "mute").then((value) => {
+				if(value != null){
+					resolveMember(message, 2).then((member) => {
+						if(member != null){
+							let reason = message.content.split(instruction[1])[1];
+		
+							if(reason != null)
+								reason = reason.trim();
+							else reason = "No reason specified";
+							denyInterview(message, member, reason);
+						} else sendMessage(message, errorMessage("Cannot find member."), false);
+					})
+				}
+			})
+		} else if(instruction[0] == "massmessage"){
+			if(message.author.id == "367375969423720458"){
+				let content = message.content.split(instruction[0]+" ")[1];
+				massMessage(message.guild, content);
+			}
+		} else if(instruction[0] == "rrlink"){
+			checkPermissions(message.member, "admin").then((value) => {
+				if(value != null){
+					if(instruction[1] != null){
+						if(instruction[2] != null){
+							message.guild.roles.fetch(instruction[2]).then((role) => {
+								if(role != null){
+									rrLink(message, instruction[1], instruction[2]);
+								} else sendMessage(message, errorMessage("You need to input a valid role ID."), false);
+							});
+						}
+					}
+				}
+			}).catch(() => {
+				sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false);
+			})
+		} else if(instruction[0] == "rrunlink"){
+			checkPermissions(message.member, "admin").then((value) => {
+				if(value != null){
+					if(instruction[1] != null){
+						message.guild.roles.fetch(instruction[1]).then((role) => {
+							if(role != null){
+								rrUnlink(message, instruction[1]);
+							} else sendMessage(message, errorMessage("You need to input a valid role ID."), false);
+						});
+					}
+				}
+			}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false)});
+		} else if(instruction[0] == "rrbody"){
+			if(instruction[1] != null){
+				checkPermissions(message.member, "admin").then((value) => {
+					if(value != null){
+						rrBody(message, message.content.split(instruction[0])[1].trim());
+					}
+				}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false)});
+			}
+		} else if(instruction[0] == "rradd"){
+			if(instruction[1] != null && instruction[2] != null){
+				checkPermissions(message.member, "admin").then((value) => {
+					if(value != null){
+						rrAdd(message, instruction[1], instruction[2]);
+					}
+				}).catch((e) => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false); console.error(e)});
+			}
+		} else if(instruction[0] == "rrcreate"){
+			if(instruction[1] != null){
+				checkPermissions(message.member, "admin").then((value) => {
+					if(value != null){
+						rrCreate(message, instruction[1]);
+					}
+				}).catch(() => {sendMessage(message, errorMessage("You do not have enough permissions to use this command."), false)});
+			}
+		} else if(instruction[0] == "rrview"){
+			console.log(reactionRoles.toString());
+			console.log(reactions.toString());
 		}
     } else if(keywords.has(message.content)){
 		sendMessage(message, keywordMessage(keywords.get(message.content)), false);
@@ -2140,5 +2463,33 @@ const embed = new Discord.MessageEmbed()
     }
 });
 
+client.on("messageReactionAdd", (reaction, user) => {
+	if(rrWatchlist.get(reaction.message.id) != null){
+		let currentBody = reactionRoles.get(String(rrWatchlist.get(reaction.message.id)));
+		
+		for(let i = 0; i < currentBody.reactions.length; i++){
+			if(reaction.emoji.toString() == currentBody.reactions[i].reaction){
+				reaction.message.guild.members.fetch(user.id).then((member) => {
+					member.roles.add(currentBody.reactions[i].rid);
+				})
+			}
+		}
+	}
+});
+
+client.on("messageReactionRemove", (reaction, user) => {
+	if(rrWatchlist.get(reaction.message.id) != null){
+		let currentBody = reactionRoles.get(String(rrWatchlist.get(reaction.message.id)));
+		
+		for(let i = 0; i < currentBody.reactions.length; i++){
+			if(reaction.emoji.toString() == currentBody.reactions[i].reaction){
+				console.log(reaction.emoji.identifier);
+				reaction.message.guild.members.fetch(user.id).then((member) => {
+					member.roles.remove(currentBody.reactions[i].rid);
+				})
+			}
+		}
+	}
+})
 client.login(env.token);
 

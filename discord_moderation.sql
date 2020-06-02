@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `bans` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=67 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=72 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS `mutes` (
   `issued_by` varchar(64) NOT NULL,
   `active` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=209 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=233 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -124,6 +124,20 @@ CREATE TABLE IF NOT EXISTS `permissions` (
 
 -- Data exporting was unselected.
 
+-- Dumping structure for table discord_moderation.reactions
+CREATE TABLE IF NOT EXISTS `reactions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `sid` varchar(64) NOT NULL DEFAULT '0',
+  `reaction` varchar(8) CHARACTER SET utf8mb4 DEFAULT NULL,
+  `roleid` varchar(64) DEFAULT NULL,
+  `added` datetime DEFAULT current_timestamp(),
+  `addedby` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `roleid` (`roleid`)
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8;
+
+-- Data exporting was unselected.
+
 -- Dumping structure for table discord_moderation.requests
 CREATE TABLE IF NOT EXISTS `requests` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -135,7 +149,7 @@ CREATE TABLE IF NOT EXISTS `requests` (
   `message` varchar(64) DEFAULT NULL,
   `handledBy` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=52 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=98 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -151,6 +165,24 @@ CREATE TABLE IF NOT EXISTS `roles` (
 
 -- Data exporting was unselected.
 
+-- Dumping structure for table discord_moderation.rr_body
+CREATE TABLE IF NOT EXISTS `rr_body` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `sid` varchar(64) DEFAULT NULL,
+  `mid` varchar(64) DEFAULT NULL,
+  `cid` varchar(64) DEFAULT NULL,
+  `status` tinyint(4) DEFAULT 0 COMMENT '0 - Creating, 1 - Deployed, 2 - Editing',
+  `body` varchar(2048) CHARACTER SET utf8mb4 DEFAULT NULL,
+  `reactions` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '[]',
+  `date` datetime DEFAULT current_timestamp(),
+  `created_by` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `mid` (`mid`),
+  UNIQUE KEY `cid` (`cid`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+
+-- Data exporting was unselected.
+
 -- Dumping structure for table discord_moderation.steamid
 CREATE TABLE IF NOT EXISTS `steamid` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -158,11 +190,13 @@ CREATE TABLE IF NOT EXISTS `steamid` (
   `mid` varchar(50) DEFAULT NULL,
   `date` datetime DEFAULT current_timestamp(),
   `whitelist` tinyint(1) DEFAULT 0,
+  `interview` tinyint(1) DEFAULT 0,
+  `reason` varchar(2048) DEFAULT NULL,
   `addedby` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `steamid` (`steamid`),
   UNIQUE KEY `mid` (`mid`)
-) ENGINE=InnoDB AUTO_INCREMENT=86 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=605 DEFAULT CHARSET=utf8;
 
 -- Data exporting was unselected.
 
@@ -176,7 +210,7 @@ CREATE TABLE IF NOT EXISTS `sticky` (
   `created_by` varchar(64) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `cid` (`cid`)
-) ENGINE=InnoDB AUTO_INCREMENT=170 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=190 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
@@ -188,7 +222,7 @@ CREATE TABLE IF NOT EXISTS `warns` (
   `reason` varchar(2048) NOT NULL,
   `issued_by` varchar(64) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4;
 
 -- Data exporting was unselected.
 
